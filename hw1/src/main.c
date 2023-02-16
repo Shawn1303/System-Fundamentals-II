@@ -24,6 +24,9 @@ int main(int argc, char **argv)
     if(global_options == HELP_OPTION)
         USAGE(*argv, EXIT_SUCCESS);
     // TO BE IMPLEMENTED
+	FILE *in = fopen(diff_filename, "r");
+	patch(stdin, stdout, in);
+	fclose(in);
     return EXIT_FAILURE; 
 }
 

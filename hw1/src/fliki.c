@@ -5,6 +5,15 @@
 #include "global.h"
 #include "debug.h"
 
+static void resetHunk(HUNK *hp) {
+	hp->type = HUNK_NO_TYPE;
+	hp->serial = 0;
+	hp->old_start = 0;
+	hp->old_end = 0;
+	hp->new_start = 0;
+	hp->new_end = 0;
+}
+
 /**
  * @brief Get the header of the next hunk in a diff file.
  * @details This function advances to the beginning of the next hunk
@@ -20,10 +29,283 @@
  * could not be properly interpreted as a hunk.
  */
 
+static int serial = 0;
+// static int ch;
+static int old_range = 0;//old_end - old_start
+static int new_range = 0;//new_end - new_start
+static int hunkNextSuccess = 0;
+
 int hunk_next(HUNK *hp, FILE *in) {
     // TO BE IMPLEMENTED
+	int num;
+	int ch;
+	while((ch = fgetc(in)) != EOF) {
+		//prinbt out while file
+		// if(ch == '\n') {
+		// 	printf("\nnew line\n");
+		// } else {
+		// 	printf("%c", ch);
+		// }
+		//Read line
+		// if(ch == '<' || ch == '>' || ch == '-') {
+		// 	debug("Go to next line");
+		// 	while(ch != '\n') {
+		// 		ch = fgetc(in);
+		// 	}
+		// 	return hunk_next(hp, in);
+		// }
+		//Read hunk
+		// 0-9[, 0-9] [a,c,d] 0-9[, 0-9]
+
+		//check if first ch is a num
+		if(ch < '0' || ch > '9') {
+			error("Hunk doesn't start with a number 0 - 9");
+			resetHunk(hp);
+			return ERR;
+		}
+		num = 0;
+		//get old_start
+		while(ch >= '0' && ch <= '9') {
+			num = num * 10 + (ch - '0');
+			ch = fgetc(in);
+		}
+		hp->old_start = num;
+		if(ch != ',' && ch != 'a' && ch != 'c' && ch != 'd') {
+			error("Not ',' or a,d,c");
+			resetHunk(hp);
+			return ERR;
+		}
+		//ch has to be ",", a c or d or else error would've been thrown before
+		//get old_end
+		if(ch == ',') {
+			ch = fgetc(in);
+			if(ch < '0' || ch > '9') {
+				error("Number doesn't start with a number 0 - 9");
+				resetHunk(hp);
+				return ERR;
+			}
+			num = 0;
+			while(ch >= '0' && ch <= '9') {
+				num = num * 10 + (ch - '0');
+				ch = fgetc(in);
+			}
+			if(ch != 'a' && ch != 'c' && ch != 'd') {
+				error("Not a,d or c");
+				resetHunk(hp);
+				return ERR;
+			} else {
+				hp->old_end = num;
+			}
+		} else {
+			hp->old_end = hp->old_start;
+		}
+
+
+
+		//old version of checking old_start and end
+		// if(ch >= '0' && ch <= '9') {
+		// 	// check first two num
+		// 	// num = num * 10 + ch - '0';
+		// 	// ch = fgetc(in);
+		// 	hp->old_start = ch - '0';
+		// 	debug("old_start = %c", ch);
+		// 	ch = fgetc(in);
+		// 	if(ch == ',') {
+		// 		ch = fgetc(in);
+		// 		if(ch >= '0' && ch <= '9') {
+		// 			hp->old_end = ch - '0';
+		// 			debug("old_end = %c", ch);
+		// 		} else {
+		// 			error("Second character not a number");
+		// 			resetHunk(hp);
+		// 			return ERR;
+		// 		}
+		// 	} else if(ch == 'a' || ch == 'c' || ch == 'd') {
+		// 		hp->old_end = hp->old_start;
+		// 		//add hunk type back to stream
+		// 		// if(ch == 'a') {
+		// 		// 	hp->type = HUNK_APPEND_TYPE;
+		// 		// }
+		// 		// if(ch == 'c') {
+		// 		// 	hp->type = HUNK_CHANGE_TYPE;
+		// 		// }
+		// 		// if(ch == 'd') {
+		// 		// 	hp->type = HUNK_DELETE_TYPE;
+		// 		// }
+		// 		ungetc(ch, in);
+		// 	} else {
+		// 		error("Not ',' or a,d,c");
+		// 		resetHunk(hp);
+		// 		return ERR;
+		// 	}
+		// } else {
+		// 	error("Hunk doesn't start with a number 0 - 9");
+		// 	resetHunk(hp);
+		// 	return ERR;
+		// }
+
+		//check hunk type
+		// if(ch == 'a') {
+		// 	if(hp->old_start != hp->old_end) {
+		// 		error("Append, old_start != old_end");
+		// 		return ERR;
+		// 	}
+		// 	hp->type = HUNK_APPEND_TYPE;
+		// }
+		// if(ch == 'c') {
+		// 	hp->type = HUNK_CHANGE_TYPE;
+		// }
+		// if(ch == 'd') {
+		// 	hp->type = HUNK_DELETE_TYPE;
+		// }
+
+		switch(ch) {
+			case 'a':
+				if(hp->old_start != hp->old_end) {
+					error("Append, old_start != old_end");
+					return ERR;
+				}
+				hp->type = HUNK_APPEND_TYPE;
+				break;
+			case 'c':
+				hp->type = HUNK_CHANGE_TYPE;
+				break;
+			case 'd':
+				hp->type = HUNK_DELETE_TYPE;
+				break;
+		}
+
+
+
+
+		//check new_start and new_end
+		ch = fgetc(in);
+		//get new_start
+		if(ch < '0' && ch > '9') {
+			error("Number doesn't start with a number 0 - 9");
+			resetHunk(hp);
+			return ERR;
+		}
+		num = 0;
+		while(ch >= '0' && ch <= '9') {
+			num = num * 10 + (ch - '0');
+			ch = fgetc(in);
+		}
+		hp->new_start = num;
+		if(ch != ',' && ch != '\n') {
+			error("Not ',' or new line");
+			resetHunk(hp);
+			return ERR;
+		}
+		//ch has to be "," or "\n"
+		//get new_end
+		if(ch == ',') {
+			ch = fgetc(in);
+			if(ch < '0' || ch > '9') {
+				error("Number doesn't start with a number 0 - 9");
+				resetHunk(hp);
+				return ERR;
+			}
+			num = 0;
+			while(ch >= '0' && ch <= '9') {
+				num = num * 10 + (ch - '0');
+				ch = fgetc(in);
+			}
+			if(ch != '\n') {
+				error("Not new line");
+				resetHunk(hp);
+				return ERR;
+			} else {
+				hp->new_end = num;
+			}
+		} else {
+			hp->new_end = hp->new_start;
+		}
+
+
+
+		//old version of checking new_start and end
+		// ch = fgetc(in);
+
+		// if(ch >= '0' && ch <= '9') {
+		// 	hp->new_start = ch - '0';
+		// 	debug("new_start = %c", ch);
+		// 	ch = fgetc(in);
+		// 	if(ch == ',') {
+		// 		ch = fgetc(in);
+		// 		if(ch >= '0' && ch <= '9') {
+		// 			hp->new_end = ch - '0';
+		// 			debug("new_end = %c", ch);
+		// 		} else {
+		// 			error("Second character not a number");
+		// 			resetHunk(hp);
+		// 			return ERR;
+		// 		}
+		// 	} else if(ch == '\n') {
+		// 		hp->new_end = hp->new_start;
+		// 		ungetc(ch, in);
+		// 	} else {
+		// 		error("Not ',' or a,d,c");
+		// 		resetHunk(hp);
+		// 		return ERR;
+		// 	}
+		// } else {
+		// 	error("Hunk doesn't start with a number 0 - 9");
+		// 	resetHunk(hp);
+		// 	return ERR;
+		// }
+
+
+		//check for delete if new_start == new_end
+		if(hp->type == 2 && hp->new_start != hp->new_end) {
+			error("Delete, new_start != new_end");
+			resetHunk(hp);
+			return ERR;
+		}
+
+		//check if hunk line ends as \n
+		if(ch != '\n') {
+			error("Did not end in new line");
+			resetHunk(hp);
+			ungetc(ch, in);
+			return ERR;
+		}
+
+		//check if numbers make sense
+		if(hp->old_start > hp->old_end || hp->new_start > hp->new_end ||
+			hp->old_start == 0|| hp->old_end == 0 || hp->new_start == 0 || hp->new_end == 0) {
+			debug("%d", hp->old_start);
+			debug("%d", hp->old_end);
+			debug("%d", hp->new_start);
+			debug("%d", hp->new_end);
+			error("Line range error");
+			resetHunk(hp);
+			return ERR;
+		}
+
+		//print msg
+		hp->serial = ++serial;
+		char t;
+		if(hp->type == 1) {
+			t = 'a';
+		}
+		if(hp->type == 2) {
+			t = 'd';
+		}
+		if(hp->type == 3) {
+			t = 'c';
+		}
+		//cal # of lines modified for old and new file after hunk_next is success
+		old_range = hp->old_end - hp->old_start + 1;
+		new_range = hp->new_end - hp->new_start + 1;
+		success("Serial: %d\n%d,%d\n%c\n%d,%d", hp->serial, hp->old_start, hp->old_end, t, hp->new_start, hp->new_end);
+		return 0;
+	}
+	resetHunk(hp);
+	return EOF;
     abort();
 }
+
 
 /**
  * @brief  Get the next character from the data portion of the hunk.
@@ -59,8 +341,181 @@ int hunk_next(HUNK *hp, FILE *in) {
  * advanced to the next hunk.
  */
 
+static int length = 0; //length of current line
+static int lineCounter = 0;//count num of lines currently counted for one section
+static int addSecForC = 0;// 0 if on delete sec for c or 1 if on add sec
+
+
 int hunk_getc(HUNK *hp, FILE *in) {
     // TO BE IMPLEMENTED
+	// if(err == 1) {
+	// 	error("continue to return ERR");
+	// 	return ERR;
+	// }
+	//get character
+	int ch = fgetc(in);
+	//hunk a
+	if(hp->type == HUNK_APPEND_TYPE || (hp->type == HUNK_CHANGE_TYPE && addSecForC == 1)) {
+		//case: beginning of a line "> "
+		if(length == 0) {
+			// ch = fgetc(in);
+			// debug("%c", ch);
+			//end of section
+			if((ch >= '0' && ch <= '9') || ch == EOF) {
+				if(lineCounter == new_range) {
+					success("EOS for append");
+					if(hp->type == HUNK_CHANGE_TYPE) {
+						addSecForC = 0;
+					}
+					ungetc(ch, in);
+					length = 0;
+					return EOS;
+				} else {
+					error("line count and new line range not match");
+					return ERR;
+				}
+			} else if(ch != '>') {
+				error("Does not began with >");
+				return ERR;
+			} else {
+				//get first character
+				length++;
+				ch = fgetc(in);
+				lineCounter++;
+				//check if num of current lines > max line for new
+				if(lineCounter > new_range) {
+					error("Maximum line exceed");
+					return ERR;
+				}
+				//there is a space
+				if(ch == ' ') {
+					ch = fgetc(in);
+				} else {
+					error("No space after >");
+					return ERR;
+				}
+				return ch;
+			}
+		}
+
+		//the end of a line
+		if(ch == '\n') {
+			length++;
+			//store \n-------------------------------------------------------------------
+
+			//check if next line is start of a hunk or ---
+			length = 0;
+			return ch;
+			// ch = fgetc(in);
+			// debug("%c", ch);
+			// if((ch >= '0' && ch <= '9') || ch == '-') {
+			// 	if(lineCounter == new_range) {
+			// 		success("EOS for append");
+			// 		ungetc(ch, in);
+			// 		length = 0;
+			// 		return EOS;
+			// 	} else {
+			// 		error("line count and new line range not match");
+			// 		return ERR;
+			// 	}
+			// } else if(ch == '>'){
+			// 	length = 0;
+			// 	ungetc(ch, in);
+			// }
+		}
+		//if line doesn't end with new line
+		if(ch == EOF) {
+			error("Doesn't end with new line");
+			return ERR;
+		}
+		//return every character in the middle
+		return ch;
+	}
+	if(hp->type == HUNK_DELETE_TYPE || (hp->type == HUNK_CHANGE_TYPE && addSecForC == 0)) {
+		if(length == 0) {
+			// ch = fgetc(in);
+			// debug("%c", ch);
+			//end of section
+			if((ch >= '0' && ch <= '9') || ch == '-' || ch == EOF) {
+				if(lineCounter == old_range) {
+					success("EOS for append");
+					if(ch == '-') {
+						//get all the ---
+						if(hp->type != HUNK_CHANGE_TYPE) {
+							error("type not c but have -");
+							return ERR;
+						}
+						int dashCount = 0;
+						while(dashCount < 4 && ch == '-') {
+							dashCount++;
+							ch = fgetc(in);
+						}
+						//ch should be \n
+						if(dashCount != 3 || ch != '\n') {
+							error("Middle section not '---NL'");
+							return ERR;
+						}
+						//check if next line starts with >
+						ch = fgetc(in);
+						if(ch != '>') {
+							error("Missing append section");
+							return ERR;
+						} else {
+							ungetc(ch, in);
+							addSecForC = 1;
+							return EOS;
+						}
+					} else {
+						ungetc(ch, in);
+						length = 0;
+						return EOS;
+					}
+				} else {
+					error("line count and new line range not match");
+					return ERR;
+				}
+			} else if(ch != '<') {
+				error("Does not began with <");
+				return ERR;
+			} else {
+				//get first character
+				length++;
+				ch = fgetc(in);
+				lineCounter++;
+				//check if num of current lines > max line for new
+				if(lineCounter > old_range) {
+					error("Maximum line exceed");
+					return ERR;
+				}
+				//there is a space
+				if(ch == ' ') {
+					ch = fgetc(in);
+				} else {
+					error("No space after <");
+					return ERR;
+				}
+				return ch;
+			}
+		}
+
+		//the end of a line
+		if(ch == '\n') {
+			length++;
+			//store \n-------------------------------------------------------------------
+
+			//check if next line is start of a hunk or ---
+			length = 0;
+			return ch;
+		}
+		if(ch == EOF) {
+			error("Doesn't end with new line");
+			return ERR;
+		}
+		//return every character in the middle
+		return ch;
+	}
+	if(hp->type == HUNK_CHANGE_TYPE) {
+	}
     abort();
 }
 
@@ -148,5 +603,40 @@ void hunk_show(HUNK *hp, FILE *out) {
 
 int patch(FILE *in, FILE *out, FILE *diff) {
     // TO BE IMPLEMENTED
+	HUNK hp;
+	while(hunk_next(&hp, diff) == 0) {
+		int ch = hunk_getc(&hp, diff);
+		while(ch != EOS && ch != ERR) {
+			// debug("%c", ch);
+			if(ch == '\n') {
+				printf("\n");
+				fflush(stdout);
+			} else {
+				printf("%c", ch);
+				fflush(stdout);
+			}
+			ch = hunk_getc(&hp, diff);
+		}
+		if(ch == EOS) {
+			lineCounter = 0;
+		}
+		if(hp.type == HUNK_CHANGE_TYPE) {
+			int ch = hunk_getc(&hp, diff);
+			while(ch != EOS && ch != ERR) {
+				// debug("%c", ch);
+				if(ch == '\n') {
+					printf("\n");
+					fflush(stdout);
+				} else {
+					printf("%c", ch);
+					fflush(stdout);
+				}
+				ch = hunk_getc(&hp, diff);
+			}
+			if(ch == EOS) {
+				lineCounter = 0;
+			}
+		}
+	}
     abort();
 }
