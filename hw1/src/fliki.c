@@ -936,9 +936,13 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 			while(lineInPtr <= hp.old_end) {
 				if((inChar = fgetc(in)) != '\n'){
 					// printf("%c", inChar);
-					fputc(inChar, out);
+					if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+						fputc(inChar, out);
+					}
 				} else {
-					fputc(inChar, out);
+					if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+						fputc(inChar, out);
+					}
 					lineInPtr++;
 					lineOutPtr++;
 					linesInOut++;
@@ -957,7 +961,9 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 					// 	error("Line in out > hp.new_end + 1");
 					// 	return -1;
 					// }
-					fputc(diffChar, out);
+					if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+						fputc(inChar, out);
+					}
 					diffChar = hunk_getc(&hp, diff);
 				}
 				if(diffChar == EOS) {
@@ -965,13 +971,21 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 				}
 				if(linesInOut != hp.new_end || diffChar == ERR) {
 					error("lineoutPtr != hp.new_end + 1 or diffChar == ERR");
-					hunk_show(&hp, stderr);
+					if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+						fprintf(stderr, "LinesInOut != hp.new_end or diffChar == ERR\n");
+						hunk_show(&hp, stderr);
+						fprintf(stderr, "...\n");
+					}
 					return -1;
 				}
 				success("Hunk add complete");
 			} else {
 				error("Line in out != hp.new_start");
-				hunk_show(&hp, stderr);
+				if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+					fprintf(stderr, "Line in out != hp.new_start\n");
+					hunk_show(&hp, stderr);
+					fprintf(stderr, "...\n");
+				}
 				return -1;
 			}
 		}
@@ -987,9 +1001,13 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 			debug("%d and %d", linesInOut, hp.new_start);
 			while(lineInPtr < hp.old_start) {
 				if((inChar = fgetc(in)) != '\n'){
-					fputc(inChar, out);
+					if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+						fputc(inChar, out);
+					}
 				} else {
-					fputc(inChar, out);
+					if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+						fputc(inChar, out);
+					}
 					lineInPtr++;
 					lineOutPtr++;
 				}
@@ -1013,7 +1031,11 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 						// debug("%c and %c", diffChar, inChar);
 					} else {
 						error("Delete line don't match");
-						hunk_show(&hp, stderr);
+						if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+							fprintf(stderr, "Delete line don't match\n");
+							hunk_show(&hp, stderr);
+							fprintf(stderr, "...\n");
+						}
 						return -1;
 					}
 				}
@@ -1024,7 +1046,11 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 				}
 				if(lineInPtr != hp.old_end + 1 || diffChar == ERR) {
 					error("LineInPtr != hp.old_end or diffChar == ERR");
-					hunk_show(&hp, stderr);
+					if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+						fprintf(stderr, "LineInPtr != hp.old_end or diffChar == ERR\n");
+						hunk_show(&hp, stderr);
+						fprintf(stderr, "...\n");
+					}
 					return -1;
 				}
 				success("Hunk delete complete");
@@ -1038,9 +1064,13 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 					debug("In: %d, Out: %d", lineInPtr, lineOutPtr);
 					while(lineInPtr <= hp.old_end) {
 						if((inChar = fgetc(in)) != '\n'){
-							fputc(inChar, out);
+							if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+								fputc(inChar, out);
+							}
 						} else {
-							fputc(inChar, out);
+							if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+								fputc(inChar, out);
+							}
 							lineInPtr++;
 							lineOutPtr++;
 							linesInOut++;
@@ -1058,7 +1088,9 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 							// 	error("Line in out > hp.new_end + 1");
 							// 	return -1;
 							// }
-							fputc(diffChar, out);
+							if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+								fputc(inChar, out);
+							}
 							diffChar = hunk_getc(&hp, diff);
 						}
 						if(diffChar == EOS) {
@@ -1066,20 +1098,32 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 						}
 						if(linesInOut != hp.new_end || diffChar == ERR) {
 							error("lineoutPtr != hp.new_end + 1 or diffChar == ERR");
-							hunk_show(&hp, stderr);
+							if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+								fprintf(stderr, "LinesInOut != hp.new_end or diffChar == ERR\n");
+								hunk_show(&hp, stderr);
+								fprintf(stderr, "...\n");
+							}
 							return -1;
 						}
 						debug("In: %d, Out: %d", lineInPtr, lineOutPtr);
 						success("Hunk add complete");
 					} else {
 						error("Line in out != hp.new_start");
-						hunk_show(&hp, stderr);
+						if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+							fprintf(stderr, "Line in out != hp.new_start\n");
+							hunk_show(&hp, stderr);
+							fprintf(stderr, "...\n");
+						}
 						return -1;
 					}
 				}
 			} else {
-				error("Line in out != hp.new_start");
-				hunk_show(&hp, stderr);
+				error("LinesInOut != hp.new_start - 1 or linesInOut != 0");
+				if((global_options & QUIET_OPTION) != QUIET_OPTION) {
+					fprintf(stderr, "LinesInOut != hp.new_start - 1 or linesInOut != 0\n");
+					hunk_show(&hp, stderr);
+					fprintf(stderr, "...\n");
+				}
 				return -1;
 			}
 		}
@@ -1127,7 +1171,9 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 		return -1;
 	}
 	while((inChar = fgetc(in)) != EOF) {
-		fputc(inChar, out);
+		if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
+			fputc(inChar, out);
+		}
 	}
 	//change this later
 	return 0;

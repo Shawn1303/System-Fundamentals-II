@@ -25,9 +25,19 @@ int main(int argc, char **argv)
         USAGE(*argv, EXIT_SUCCESS);
     // TO BE IMPLEMENTED
 	FILE *in = fopen(diff_filename, "r");
-	patch(stdin, stdout, in);
-	fclose(in);
-    return EXIT_SUCCESS; 
+	if(in) {
+		int result = patch(stdin, stdout, in);
+		fclose(in);
+		if(result) {
+			return EXIT_FAILURE;
+		} else {
+			fprintf(stderr, "Patch unsuccessful");
+			return EXIT_SUCCESS; 
+		}
+	} else {
+		fprintf(stderr, "File not exist");
+		return EXIT_FAILURE;
+	}
 }
 
 /*
