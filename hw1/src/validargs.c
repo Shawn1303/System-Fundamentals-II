@@ -96,5 +96,6 @@ int validargs(int argc, char **argv) {
 			return -1;
 		}
 	}
-    abort();
+	return -1;
+    // abort();
 }
