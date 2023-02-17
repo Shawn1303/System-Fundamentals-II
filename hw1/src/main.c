@@ -28,14 +28,14 @@ int main(int argc, char **argv)
 	if(in) {
 		int result = patch(stdin, stdout, in);
 		fclose(in);
-		if(result) {
+		if(result == -1) {
 			return EXIT_FAILURE;
 		} else {
-			fprintf(stderr, "Patch unsuccessful");
+			fprintf(stderr, "Patch successful\n");
 			return EXIT_SUCCESS; 
 		}
 	} else {
-		fprintf(stderr, "File not exist");
+		fprintf(stderr, "File not exist\n");
 		return EXIT_FAILURE;
 	}
 }

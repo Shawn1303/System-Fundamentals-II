@@ -961,8 +961,10 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 					// 	error("Line in out > hp.new_end + 1");
 					// 	return -1;
 					// }
+					// fputc(diffChar, out);
 					if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
-						fputc(inChar, out);
+						// fputc(inChar, out);
+						fputc(diffChar, out);
 					}
 					diffChar = hunk_getc(&hp, diff);
 				}
@@ -1089,7 +1091,8 @@ int patch(FILE *in, FILE *out, FILE *diff) {
 							// 	return -1;
 							// }
 							if((global_options & NO_PATCH_OPTION) != NO_PATCH_OPTION) {
-								fputc(inChar, out);
+								// fputc(inChar, out);
+								fputc(diffChar, out);
 							}
 							diffChar = hunk_getc(&hp, diff);
 						}
