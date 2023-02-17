@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 	FILE *in = fopen(diff_filename, "r");
 	patch(stdin, stdout, in);
 	fclose(in);
-    return EXIT_FAILURE; 
+    return EXIT_SUCCESS; 
 }
 
 /*

@@ -33,7 +33,15 @@ static int serial = 0;
 // static int ch;
 static int old_range = 0;//old_end - old_start
 static int new_range = 0;//new_end - new_start
-static int hunkNextSuccess = 0;
+static int hunkCompleted = 1;// 1 if hunk completed 0 if not
+static char *delArr = hunk_deletions_buffer;
+// *(hunk_deletions_buffer + 510) = (unsigned char) 0x0;
+// *(hunk_deletions_buffer + 511) = (unsigned char) 0x0;
+// *(hunk_deletions_buffer + 509) = (unsigned char) 0x0;
+static char *addArr = hunk_additions_buffer;
+// *(hunk_additions_buffer + 510) = (unsigned char) 0x0;
+// *(hunk_additions_buffer + 511) = (unsigned char) 0x0;
+// *(hunk_additions_buffer + 509) = (unsigned char) 0x0;
 
 int hunk_next(HUNK *hp, FILE *in) {
     // TO BE IMPLEMENTED
@@ -63,6 +71,11 @@ int hunk_next(HUNK *hp, FILE *in) {
 			resetHunk(hp);
 			return ERR;
 		}
+		// while(ch < '0' || ch > '9') {
+		// 	error("Hunk doesn't start with a number 0 - 9");
+		// 	resetHunk(hp);
+		// 	return ERR;
+		// }
 		num = 0;
 		//get old_start
 		while(ch >= '0' && ch <= '9') {
@@ -272,8 +285,8 @@ int hunk_next(HUNK *hp, FILE *in) {
 		}
 
 		//check if numbers make sense
-		if(hp->old_start > hp->old_end || hp->new_start > hp->new_end ||
-			hp->old_start == 0|| hp->old_end == 0 || hp->new_start == 0 || hp->new_end == 0) {
+		if(hp->old_start > hp->old_end || hp->new_start > hp->new_end) {
+			// hp->old_start == 0|| hp->old_end == 0 || hp->new_start == 0 || hp->new_end == 0) {
 			debug("%d", hp->old_start);
 			debug("%d", hp->old_end);
 			debug("%d", hp->new_start);
@@ -284,26 +297,45 @@ int hunk_next(HUNK *hp, FILE *in) {
 		}
 
 		//print msg
+		// char t;
+		// if(hp->type == 1) {
+		// 	t = 'a';
+		// }
+		// if(hp->type == 2) {
+		// 	t = 'd';
+		// }
+		// if(hp->type == 3) {
+		// 	t = 'c';
+		// }
+		// //cal # of lines modified for old and new file after hunk_next is success
+		// success("Serial: %d\n%d,%d\n%c\n%d,%d", hp->serial, hp->old_start, hp->old_end, t, hp->new_start, hp->new_end);
 		hp->serial = ++serial;
-		char t;
-		if(hp->type == 1) {
-			t = 'a';
-		}
-		if(hp->type == 2) {
-			t = 'd';
-		}
-		if(hp->type == 3) {
-			t = 'c';
-		}
-		//cal # of lines modified for old and new file after hunk_next is success
 		old_range = hp->old_end - hp->old_start + 1;
 		new_range = hp->new_end - hp->new_start + 1;
-		success("Serial: %d\n%d,%d\n%c\n%d,%d", hp->serial, hp->old_start, hp->old_end, t, hp->new_start, hp->new_end);
+		hunkCompleted = 0;
+		if(hp->type == HUNK_APPEND_TYPE) {
+			addArr = hunk_additions_buffer;
+			*addArr = (unsigned char) 0x0;
+			*(addArr + 1) = (unsigned char) 0x0;
+		} else if(hp->type == HUNK_DELETE_TYPE) {
+			delArr = hunk_deletions_buffer;
+			*delArr = (unsigned char) 0x0;
+			*(delArr + 1) = (unsigned char) 0x0;
+		} else {
+			addArr = hunk_additions_buffer;
+			*addArr = (unsigned char) 0x0;
+			*(addArr + 1) = (unsigned char) 0x0;
+			delArr = hunk_deletions_buffer;
+			*delArr = (unsigned char) 0x0;
+			*(delArr + 1) = (unsigned char) 0x0;
+		}
+		*(hunk_deletions_buffer + 509) = (unsigned char) 0x0;
+		*(hunk_additions_buffer + 509) = (unsigned char) 0x0;
 		return 0;
 	}
 	resetHunk(hp);
 	return EOF;
-    abort();
+    // abort();
 }
 
 
@@ -344,7 +376,10 @@ int hunk_next(HUNK *hp, FILE *in) {
 static int length = 0; //length of current line
 static int lineCounter = 0;//count num of lines currently counted for one section
 static int addSecForC = 0;// 0 if on delete sec for c or 1 if on add sec
+static char *byte1;
+static char *byte2;
 
+//implement buffer max--------------------------------------------------------------------------
 
 int hunk_getc(HUNK *hp, FILE *in) {
     // TO BE IMPLEMENTED
@@ -352,6 +387,10 @@ int hunk_getc(HUNK *hp, FILE *in) {
 	// 	error("continue to return ERR");
 	// 	return ERR;
 	// }
+	if(hunkCompleted == 1) {
+		error("Hunk completed. Go to next hunk");
+		return ERR;
+	}
 	//get character
 	int ch = fgetc(in);
 	//hunk a
@@ -369,15 +408,51 @@ int hunk_getc(HUNK *hp, FILE *in) {
 					}
 					ungetc(ch, in);
 					length = 0;
+					hunkCompleted = 1;
+					// debug("%c", *(hunk_additions_buffer + 508));
+					// debug("%c", *(hunk_additions_buffer + 509));
+					// debug("%c", *(hunk_additions_buffer + 510));
+					// debug("%c", *(hunk_additions_buffer + 511));
 					return EOS;
 				} else {
 					error("line count and new line range not match");
+
+
+					*byte1 = ((unsigned char) length) & 0xff;
+					*byte2 = ((unsigned char) length) >> 8;
+
+
 					return ERR;
 				}
 			} else if(ch != '>') {
 				error("Does not began with >");
+
+
+				*byte1 = ((unsigned char) length) & 0xff;
+				*byte2 = ((unsigned char) length) >> 8;
+
+
 				return ERR;
 			} else {
+				//initialize buffer
+				if(*(hunk_additions_buffer + 509) == 0) {
+					byte1 = addArr;
+					byte2 = ++addArr;
+				} 
+				// else {
+				// 	debug("%c", *(hunk_additions_buffer + 508));
+				// 	debug("%c", *(hunk_additions_buffer + 509));
+				// 	debug("%c", *(hunk_additions_buffer + 510));
+				// 	debug("%c", *(hunk_additions_buffer + 511));
+				// }
+				// *byte1 = (unsigned char) 0x0;
+				// *byte2 = (unsigned char) 0x0;
+				// byte1 = addArr;
+				// *byte1 = (unsigned char) 0x04;
+				// debug("0x%x", *byte1);	
+				// byte2 = ++addArr;
+				// *byte2 = (unsigned char) 0xf2;
+				// debug("0x%x", (unsigned char) *byte2);
 				//get first character
 				length++;
 				ch = fgetc(in);
@@ -385,6 +460,12 @@ int hunk_getc(HUNK *hp, FILE *in) {
 				//check if num of current lines > max line for new
 				if(lineCounter > new_range) {
 					error("Maximum line exceed");
+					
+
+					*byte1 = ((unsigned char) length) & 0xff;
+					*byte2 = ((unsigned char) length) >> 8;
+
+
 					return ERR;
 				}
 				//there is a space
@@ -392,7 +473,21 @@ int hunk_getc(HUNK *hp, FILE *in) {
 					ch = fgetc(in);
 				} else {
 					error("No space after >");
+
+					
+
+					*byte1 = ((unsigned char) length) & 0xff;
+					*byte2 = ((unsigned char) length) >> 8;
+
+
 					return ERR;
+				}
+				if(*(hunk_additions_buffer + 509) == 0) {
+					*(++addArr) = ch;
+					if(*(hunk_additions_buffer + 509) != 0) {
+						*byte1 = ((unsigned char) length) & 0xff;
+						*byte2 = ((unsigned char) length) >> 8;
+					}
 				}
 				return ch;
 			}
@@ -401,10 +496,30 @@ int hunk_getc(HUNK *hp, FILE *in) {
 		//the end of a line
 		if(ch == '\n') {
 			length++;
-			//store \n-------------------------------------------------------------------
-
-			//check if next line is start of a hunk or ---
+			//store length
+			// *(++addArr) = ch;
+			if(*(hunk_additions_buffer + 509) == 0) {
+				*(++addArr) = ch;
+			
+				*byte1 = ((unsigned char) length) & 0xff;
+				*byte2 = ((unsigned char) length) >> 8;
+				// debug("%x", *byte1);
+				// debug("%x", *byte2);
+				// addArr = byte2 + 1;
+				// for(int i = 0; i < *byte1; i++) {
+				// 	if(*(addArr + i) == '\n') {
+				// 		debug("%d", *(addArr + i));
+				// 	} else {
+				// 		debug("%c", *(addArr + i));
+				// 	}
+				// }
+				//check if next line is start of a hunk or ---
+				addArr++;
+				*addArr = (unsigned char) 0x0;
+				*(addArr + 1) = (unsigned char) 0x0;
+			}
 			length = 0;
+			//returning NL
 			return ch;
 			// ch = fgetc(in);
 			// debug("%c", ch);
@@ -426,9 +541,24 @@ int hunk_getc(HUNK *hp, FILE *in) {
 		//if line doesn't end with new line
 		if(ch == EOF) {
 			error("Doesn't end with new line");
+
+				
+
+			*byte1 = ((unsigned char) length) & 0xff;
+			*byte2 = ((unsigned char) length) >> 8;
+
+
 			return ERR;
 		}
 		//return every character in the middle
+		if(*(hunk_additions_buffer + 509) == 0) {
+			*(++addArr) = ch;
+			if(*(hunk_additions_buffer + 509) != 0) {
+				*byte1 = ((unsigned char) length) & 0xff;
+				*byte2 = ((unsigned char) length) >> 8;
+			}
+		}
+		length++;
 		return ch;
 	}
 	if(hp->type == HUNK_DELETE_TYPE || (hp->type == HUNK_CHANGE_TYPE && addSecForC == 0)) {
@@ -443,6 +573,12 @@ int hunk_getc(HUNK *hp, FILE *in) {
 						//get all the ---
 						if(hp->type != HUNK_CHANGE_TYPE) {
 							error("type not c but have -");
+							
+
+						*byte1 = ((unsigned char) length) & 0xff;
+						*byte2 = ((unsigned char) length) >> 8;
+
+
 							return ERR;
 						}
 						int dashCount = 0;
@@ -453,12 +589,22 @@ int hunk_getc(HUNK *hp, FILE *in) {
 						//ch should be \n
 						if(dashCount != 3 || ch != '\n') {
 							error("Middle section not '---NL'");
+							
+							*byte1 = ((unsigned char) length) & 0xff;
+							*byte2 = ((unsigned char) length) >> 8;
+
+
 							return ERR;
 						}
 						//check if next line starts with >
 						ch = fgetc(in);
 						if(ch != '>') {
 							error("Missing append section");
+							
+							*byte1 = ((unsigned char) length) & 0xff;
+							*byte2 = ((unsigned char) length) >> 8;
+
+
 							return ERR;
 						} else {
 							ungetc(ch, in);
@@ -468,16 +614,37 @@ int hunk_getc(HUNK *hp, FILE *in) {
 					} else {
 						ungetc(ch, in);
 						length = 0;
+						hunkCompleted = 1;
 						return EOS;
 					}
 				} else {
 					error("line count and new line range not match");
+
+				
+					*byte1 = ((unsigned char) length) & 0xff;
+					*byte2 = ((unsigned char) length) >> 8;
+
+
 					return ERR;
 				}
 			} else if(ch != '<') {
 				error("Does not began with <");
+				
+				*byte1 = ((unsigned char) length) & 0xff;
+				*byte2 = ((unsigned char) length) >> 8;
+
+
 				return ERR;
 			} else {
+				//set up length in buffer
+				if(*(hunk_deletions_buffer + 509) == 0) {
+					byte1 = delArr;
+					byte2 = ++delArr;
+				}
+				// byte1 = delArr;
+				// byte2 = ++delArr;
+				// *byte1 = (unsigned char) 0x0;
+				// *byte2 = (unsigned char) 0x0;
 				//get first character
 				length++;
 				ch = fgetc(in);
@@ -485,6 +652,11 @@ int hunk_getc(HUNK *hp, FILE *in) {
 				//check if num of current lines > max line for new
 				if(lineCounter > old_range) {
 					error("Maximum line exceed");
+					
+					*byte1 = ((unsigned char) length) & 0xff;
+					*byte2 = ((unsigned char) length) >> 8;
+
+
 					return ERR;
 				}
 				//there is a space
@@ -492,8 +664,21 @@ int hunk_getc(HUNK *hp, FILE *in) {
 					ch = fgetc(in);
 				} else {
 					error("No space after <");
+					
+					*byte1 = ((unsigned char) length) & 0xff;
+					*byte2 = ((unsigned char) length) >> 8;
+
+
 					return ERR;
 				}
+				if(*(hunk_deletions_buffer + 509) == 0) {
+					*(++delArr) = ch;
+					if(*(hunk_deletions_buffer + 509) != 0) {
+						*byte1 = ((unsigned char) length) & 0xff;
+						*byte2 = ((unsigned char) length) >> 8;
+					}
+				}
+				// *(++delArr) = ch;
 				return ch;
 			}
 		}
@@ -501,22 +686,52 @@ int hunk_getc(HUNK *hp, FILE *in) {
 		//the end of a line
 		if(ch == '\n') {
 			length++;
+			if(*(hunk_deletions_buffer + 509) == 0) {
+				*(++delArr) = ch;
+			
 			//store \n-------------------------------------------------------------------
-
-			//check if next line is start of a hunk or ---
+				*byte1 = ((unsigned char) length) & 0xff;
+				*byte2 = ((unsigned char) length) >> 8;
+				// debug("%x", *byte1);
+				// debug("%x", *byte2);
+				// delArr = byte2 + 1;
+				// for(int i = 0; i < *byte1; i++) {
+				// 	if(*(delArr + i) == '\n') {
+				// 		debug("%d", *(delArr + i));
+				// 	} else {
+				// 		debug("%c", *(delArr + i));
+				// 	}
+				// }
+				//check if next line is start of a hunk or ---
+				delArr++;
+				*delArr = (unsigned char) 0x0;
+				*(delArr + 1) = (unsigned char) 0x0;
+			}
 			length = 0;
 			return ch;
 		}
 		if(ch == EOF) {
 			error("Doesn't end with new line");
+			
+			*byte1 = ((unsigned char) length) & 0xff;
+			*byte2 = ((unsigned char) length) >> 8;
+
+
 			return ERR;
 		}
 		//return every character in the middle
+		length++;
+		if(*(hunk_deletions_buffer + 509) == 0) {
+			*(++delArr) = ch;
+			if(*(hunk_deletions_buffer + 509) != 0) {
+				*byte1 = ((unsigned char) length) & 0xff;
+				*byte2 = ((unsigned char) length) >> 8;
+			}
+		}
 		return ch;
 	}
-	if(hp->type == HUNK_CHANGE_TYPE) {
-	}
-    abort();
+	return ERR;
+    // abort();
 }
 
 /**
@@ -550,7 +765,101 @@ int hunk_getc(HUNK *hp, FILE *in) {
 
 void hunk_show(HUNK *hp, FILE *out) {
     // TO BE IMPLEMENTED
-    abort();
+	if(hp->type == HUNK_APPEND_TYPE) {
+		fprintf(out, "%d%c",hp->old_start, 'a');
+		if(hp->new_start == hp->new_end) {
+			fprintf(out, "%d\n",hp->new_start);
+		} else {
+			fprintf(out, "%d,%d\n",hp->new_start, hp->new_end);
+		}
+
+		byte1 = hunk_additions_buffer;
+		byte2 = byte1 + 1;
+		while((*byte2 << 8) + *byte1 != 0) {
+			char *letterPtr = byte2;
+			int lineLen = (*byte2 << 8) + *byte1;
+			// debug("%c",*letterPtr);
+			// debug("%p", hunk_additions_buffer+509);
+			if(letterPtr > hunk_additions_buffer+509) {
+				fputc(*(hunk_additions_buffer+509), out);
+			} else if(lineLen > 1){
+				fprintf(out, "> ");
+				debug("%d", lineLen);
+			}
+			while(lineLen != 0) {
+				fputc(*(++letterPtr), out);
+				lineLen--;
+			}
+			byte1 = letterPtr + 1;
+			byte2 = byte1 + 1;
+		}
+		if(*(hunk_additions_buffer + 509) != 0) {
+			fprintf(out, "...\n");
+		}
+	}
+	if(hp->type == HUNK_DELETE_TYPE || hp->type == HUNK_CHANGE_TYPE) {
+	// && hunkCompleted == 1) {
+		if(hp->old_start == hp->old_end) {
+			fprintf(out, "%d", hp->old_start);
+		} else {
+			fprintf(out, "%d,%d",hp->old_start, hp->old_end);
+		}
+		if(hp->type == HUNK_DELETE_TYPE) {
+			fprintf(out, "d%d\n",hp->new_start);
+		} else {
+			fputc('c', out);
+			if(hp->new_start == hp->new_end) {
+				fprintf(out, "%d\n",hp->new_start);
+			} else {
+				fprintf(out, "%d,%d\n",hp->new_start, hp->new_end);
+			}
+		}
+		byte1 = hunk_deletions_buffer;
+		byte2 = byte1 + 1;
+		while((*byte2 << 8) + *byte1 != 0) {
+			char *letterPtr = byte2;
+			int lineLen = (*byte2 << 8) + *byte1;
+			// fprintf(out, "< ");
+			if(letterPtr > hunk_deletions_buffer+509) {
+				fputc(*(hunk_deletions_buffer+509), out);
+			} else if(lineLen > 1){
+				fprintf(out, "< ");
+			}
+			while(lineLen != 0) {
+				fputc(*(++letterPtr), out);
+				lineLen--;
+			}
+			byte1 = letterPtr + 1;
+			byte2 = byte1 + 1;
+		}
+		if(*(hunk_deletions_buffer + 509) != 0) {
+			fprintf(out, "...\n");
+		}
+		if(hp->type == HUNK_CHANGE_TYPE) {
+			fprintf(out, "---\n");
+			byte1 = hunk_additions_buffer;
+			byte2 = byte1 + 1;
+			while((*byte2 << 8) + *byte1 != 0) {
+				char *letterPtr = byte2;
+				int lineLen = (*byte2 << 8) + *byte1;
+				if(letterPtr > hunk_additions_buffer+509) {
+					fputc(*(hunk_additions_buffer+509), out);
+				} else if(lineLen > 1){
+					fprintf(out, "> ");
+				}
+				while(lineLen != 0) {
+					fputc(*(++letterPtr), out);
+					lineLen--;
+				}
+				byte1 = letterPtr + 1;
+				byte2 = byte1 + 1;
+			}
+			if(*(hunk_additions_buffer + 509) != 0) {
+				fprintf(out, "...\n");
+			}
+		}
+	}
+    // abort();
 }
 
 /**
@@ -604,39 +913,223 @@ void hunk_show(HUNK *hp, FILE *out) {
 int patch(FILE *in, FILE *out, FILE *diff) {
     // TO BE IMPLEMENTED
 	HUNK hp;
-	while(hunk_next(&hp, diff) == 0) {
-		int ch = hunk_getc(&hp, diff);
-		while(ch != EOS && ch != ERR) {
-			// debug("%c", ch);
-			if(ch == '\n') {
-				printf("\n");
-				fflush(stdout);
-			} else {
-				printf("%c", ch);
-				fflush(stdout);
+	*(hunk_deletions_buffer + 510) = (unsigned char) 0x0;
+	*(hunk_deletions_buffer + 511) = (unsigned char) 0x0;
+	*(hunk_deletions_buffer + 509) = (unsigned char) 0x0;
+	*(hunk_additions_buffer + 510) = (unsigned char) 0x0;
+	*(hunk_additions_buffer + 511) = (unsigned char) 0x0;
+	*(hunk_additions_buffer + 509) = (unsigned char) 0x0;
+	int hunkNextStatus;
+	int lineInPtr = 0;
+	int lineOutPtr = 0;
+	int inChar;
+	int diffChar;
+	int linesInOut = 0;
+	while((hunkNextStatus = hunk_next(&hp, diff)) == 0) {
+		if(hp.type == HUNK_APPEND_TYPE) {
+			if(lineOutPtr == 0) {
+				lineInPtr++;
+				lineOutPtr++;
 			}
-			ch = hunk_getc(&hp, diff);
-		}
-		if(ch == EOS) {
-			lineCounter = 0;
-		}
-		if(hp.type == HUNK_CHANGE_TYPE) {
-			int ch = hunk_getc(&hp, diff);
-			while(ch != EOS && ch != ERR) {
-				// debug("%c", ch);
-				if(ch == '\n') {
-					printf("\n");
-					fflush(stdout);
+			debug("In: %d, Out: %d", lineInPtr, lineOutPtr);
+			// debug("%d and %d", lineInPtr, hp.old_end);
+			while(lineInPtr <= hp.old_end) {
+				if((inChar = fgetc(in)) != '\n'){
+					// printf("%c", inChar);
+					fputc(inChar, out);
 				} else {
-					printf("%c", ch);
-					fflush(stdout);
+					fputc(inChar, out);
+					lineInPtr++;
+					lineOutPtr++;
+					linesInOut++;
 				}
-				ch = hunk_getc(&hp, diff);
 			}
-			if(ch == EOS) {
-				lineCounter = 0;
+			debug("In: %d, Out: %d", lineInPtr, lineOutPtr);
+			// debug("%d and %d", lineOutPtr, hp.new_start);
+			if(lineOutPtr == hp.new_start) {
+				diffChar = hunk_getc(&hp, diff);
+				while(diffChar != EOS && diffChar != ERR) {
+					if(diffChar == '\n') {
+						lineOutPtr++;
+						linesInOut++;
+					}
+					// if(lineOutPtr > hp.new_end + 1) {
+					// 	error("Line in out > hp.new_end + 1");
+					// 	return -1;
+					// }
+					fputc(diffChar, out);
+					diffChar = hunk_getc(&hp, diff);
+				}
+				if(diffChar == EOS) {
+					lineCounter = 0;
+				}
+				if(linesInOut != hp.new_end || diffChar == ERR) {
+					error("lineoutPtr != hp.new_end + 1 or diffChar == ERR");
+					hunk_show(&hp, stderr);
+					return -1;
+				}
+				success("Hunk add complete");
+			} else {
+				error("Line in out != hp.new_start");
+				hunk_show(&hp, stderr);
+				return -1;
+			}
+		}
+		if(hp.type == HUNK_DELETE_TYPE || hp.type == HUNK_CHANGE_TYPE) {
+			if(lineInPtr == 0) {
+				lineInPtr++;
+				// lineOutPtr++;
+				// if(hp.type == HUNK_CHANGE_TYPE) {
+				// 	lineOutPtr++;
+				// }
+			}
+			//lineInPtr should be on the line to be deleted
+			debug("%d and %d", linesInOut, hp.new_start);
+			while(lineInPtr < hp.old_start) {
+				if((inChar = fgetc(in)) != '\n'){
+					fputc(inChar, out);
+				} else {
+					fputc(inChar, out);
+					lineInPtr++;
+					lineOutPtr++;
+				}
+			}
+			//lineOutPtr should be on the line before the first deleted line
+			debug("%d and %d", linesInOut, hp.new_start);
+			// if((hp.type == HUNK_CHANGE_TYPE && lineOutPtr == hp.old_start - 1) ||
+			// (hp.type == HUNK_DELETE_TYPE && lineOutPtr == hp.old_start - 1)) {
+			if(linesInOut == hp.new_start - 1 || linesInOut == 0) {
+				diffChar = hunk_getc(&hp, diff);
+				inChar = fgetc(in);
+				while(diffChar != EOS && diffChar != ERR) {
+					if(diffChar == '\n') {
+						lineInPtr++;
+					}
+					if(diffChar == inChar) {
+						diffChar = hunk_getc(&hp, diff);
+						if(diffChar != EOS && diffChar != ERR) {
+							inChar = fgetc(in);
+						}
+						// debug("%c and %c", diffChar, inChar);
+					} else {
+						error("Delete line don't match");
+						hunk_show(&hp, stderr);
+						return -1;
+					}
+				}
+				// debug("%c", inChar);
+				// ungetc(inChar, in);
+				if(diffChar == EOS) {
+					lineCounter = 0;
+				}
+				if(lineInPtr != hp.old_end + 1 || diffChar == ERR) {
+					error("LineInPtr != hp.old_end or diffChar == ERR");
+					hunk_show(&hp, stderr);
+					return -1;
+				}
+				success("Hunk delete complete");
+				debug("In: %d, Out: %d", lineInPtr, lineOutPtr);
+				if(hp.type == HUNK_CHANGE_TYPE) {
+					if(lineOutPtr == 0) {
+						// lineInPtr++;
+						lineOutPtr++;
+					}
+					// debug("%d and %d", lineInPtr, hp.old_end);
+					debug("In: %d, Out: %d", lineInPtr, lineOutPtr);
+					while(lineInPtr <= hp.old_end) {
+						if((inChar = fgetc(in)) != '\n'){
+							fputc(inChar, out);
+						} else {
+							fputc(inChar, out);
+							lineInPtr++;
+							lineOutPtr++;
+							linesInOut++;
+						}
+					}
+					// debug("%d and %d", lineOutPtr, hp.new_start);
+					if(lineOutPtr == hp.new_start) {
+						diffChar = hunk_getc(&hp, diff);
+						while(diffChar != EOS && diffChar != ERR) {
+							if(diffChar == '\n') {
+								lineOutPtr++;
+								linesInOut++;
+							}
+							// if(lineOutPtr > hp.new_end + 1) {
+							// 	error("Line in out > hp.new_end + 1");
+							// 	return -1;
+							// }
+							fputc(diffChar, out);
+							diffChar = hunk_getc(&hp, diff);
+						}
+						if(diffChar == EOS) {
+							lineCounter = 0;
+						}
+						if(linesInOut != hp.new_end || diffChar == ERR) {
+							error("lineoutPtr != hp.new_end + 1 or diffChar == ERR");
+							hunk_show(&hp, stderr);
+							return -1;
+						}
+						debug("In: %d, Out: %d", lineInPtr, lineOutPtr);
+						success("Hunk add complete");
+					} else {
+						error("Line in out != hp.new_start");
+						hunk_show(&hp, stderr);
+						return -1;
+					}
+				}
+			} else {
+				error("Line in out != hp.new_start");
+				hunk_show(&hp, stderr);
+				return -1;
 			}
 		}
 	}
-    abort();
+
+	// 	int ch = hunk_getc(&hp, diff);
+	// 	while(ch != EOS && ch != ERR) {
+	// 		// debug("%c", ch);
+	// 		// if(ch == '\n') {
+	// 		// 	printf("\n");
+	// 		// 	fflush(stdout);
+	// 		// } else {
+	// 		// 	printf("%c", ch);
+	// 		// 	fflush(stdout);
+	// 		// }
+	// 		ch = hunk_getc(&hp, diff);
+	// 	}
+	// 	if(ch == EOS) {
+	// 		lineCounter = 0;
+	// 		if(hp.type != HUNK_CHANGE_TYPE) {
+	// 			hunk_show(&hp, stderr);
+	// 		}
+	// 		// fflush(stderr);
+	// 	}
+	// 	if(hp.type == HUNK_CHANGE_TYPE) {
+	// 		int ch = hunk_getc(&hp, diff);
+	// 		while(ch != EOS && ch != ERR) {
+	// 			// debug("%c", ch);
+	// 			// if(ch == '\n') {
+	// 			// 	printf("\n");
+	// 			// 	fflush(stdout);
+	// 			// } else {
+	// 			// 	printf("%c", ch);
+	// 			// 	fflush(stdout);
+	// 			// }
+	// 			ch = hunk_getc(&hp, diff);
+	// 		}
+	// 		if(ch == EOS) {
+	// 			lineCounter = 0;
+	// 			hunk_show(&hp, stderr);
+	// 		}
+	// 	}
+	// }
+	if(hunkNextStatus == ERR) {
+		return -1;
+	}
+	while((inChar = fgetc(in)) != EOF) {
+		fputc(inChar, out);
+	}
+	//change this later
+	return 0;
+    // abort();
 }
