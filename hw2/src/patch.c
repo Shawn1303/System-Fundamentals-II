@@ -163,6 +163,7 @@ void plan_b();
 void ask();
 int intuit_diff_type();
 void skip_to();
+int mkstemp();
 
 /* patch type */
 
@@ -200,10 +201,10 @@ char **argv;
     setbuf(stderr,serrbuf);
     for (i = 0; i<MAXFILEC; i++)
         filearg[i] = Nullch;
-    Mktemp(TMPOUTNAME);
-    Mktemp(TMPINNAME);
-    Mktemp(TMPREJNAME);
-    Mktemp(TMPPATNAME);
+    mkstemp(TMPOUTNAME);
+    mkstemp(TMPINNAME);
+    mkstemp(TMPREJNAME);
+    mkstemp(TMPPATNAME);
 
     /* parse switches */
     Argc = argc;
