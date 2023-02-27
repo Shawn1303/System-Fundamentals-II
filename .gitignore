@@ -1,2 +1,6 @@
 bin/
 build/
+hw1/rsrc/
+hw1/tests/
+hw1/sample/
+.vscode/
