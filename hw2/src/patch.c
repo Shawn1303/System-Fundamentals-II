@@ -316,6 +316,7 @@ char **argv;
 		}
 		set_signals();
 	}
+	fclose(pfp);
 	my_exit(0);
 }
 
