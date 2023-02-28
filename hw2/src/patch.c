@@ -1823,10 +1823,10 @@ register char *s;
 	*t = NULL;
 
 	t = s;
-	while (*t++)
-		rv = malloc((MEM)((t - s)+1));
+	while ((*t++));
+		// rv = malloc((MEM)((t - s)+1));
 		// rv = malloc((MEM)(t - s));
-	// rv = malloc((MEM)(t - s));
+	rv = malloc((MEM)(t - s));
 	if (rv == NULL)
 		fatal("patch: out of memory (savestr)\n");
 	t = rv;
