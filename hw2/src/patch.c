@@ -1214,6 +1214,7 @@ void open_patch_file(filename) char *filename;
 		fatal("patch file %s not found\n", filename);
 	Fstat(fileno(pfp), &filestat);
 	p_filesize = filestat.st_size;
+	
 	next_intuit_at(0L); /* start at the beginning */
 }
 
@@ -1828,11 +1829,10 @@ char *
 savestr(s)
 register char *s;
 {
-	if (s == NULL)
-		return NULL;
 	register char *rv = NULL,
 	*t = NULL;
-
+	if (s == NULL)
+		return NULL;
 	t = s;
 	while ((*t++));
 	rv = malloc((MEM)(t - s));
