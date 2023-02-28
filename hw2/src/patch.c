@@ -1825,6 +1825,8 @@ register char *s;
 	t = s;
 	while (*t++)
 		rv = malloc((MEM)((t - s)+1));
+		// rv = malloc((MEM)(t - s));
+	// rv = malloc((MEM)(t - s));
 	if (rv == NULL)
 		fatal("patch: out of memory (savestr)\n");
 	t = rv;
