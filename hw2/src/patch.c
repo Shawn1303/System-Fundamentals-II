@@ -1030,7 +1030,7 @@ bool
 			iline++;
 	}
 	/*NOSTRICT*/
-	i_ptr = (char **)malloc((MEM)((iline + 1) * sizeof(char *)));
+	i_ptr = (char **)malloc((MEM)((iline + 2) * sizeof(char *)));
 	if (i_ptr == Null(char **))
 	{ /* shucks, it was a near thing */
 		free((char *)i_womp);
