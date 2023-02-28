@@ -316,6 +316,10 @@ char **argv;
 		}
 		set_signals();
 	}
+	// if (origext != Nullch) {
+	// 	free(origext);
+	// 	origext = Nullch;
+	// }
 	fclose(pfp);
 	my_exit(0);
 }
@@ -345,6 +349,11 @@ void reinitialize_almost_everything()
 	{
 		free(outname);
 		outname = Nullch;
+	}
+
+	if (origext != Nullch) {
+		free(origext);
+		origext = Nullch;
 	}
 
 	last_offset = 0;
@@ -1214,7 +1223,6 @@ void open_patch_file(filename) char *filename;
 		fatal("patch file %s not found\n", filename);
 	Fstat(fileno(pfp), &filestat);
 	p_filesize = filestat.st_size;
-	
 	next_intuit_at(0L); /* start at the beginning */
 }
 
@@ -1324,10 +1332,14 @@ int intuit_diff_type()
 			{
 				if (oldname && newname)
 				{
-					if (strlen(oldname) < strlen(newname))
+					if (strlen(oldname) < strlen(newname)) {
 						filearg[0] = oldname;
-					else
+						free(newname);
+					}
+					else {
 						filearg[0] = newname;
+						free(oldname);
+					}
 				}
 				else if (oldname)
 					filearg[0] = oldname;
