@@ -128,7 +128,7 @@ LINENUM locate_hunk();
 bool patch_match();
 bool similar();
 void *malloc();
-char *savestr();
+char *savestr(register char *);
 char *strcpy();
 char *strcat();
 // void sprintf();                /* usually */
@@ -864,8 +864,8 @@ void dump_line(line)
 /* does the patch pattern match at line base+offset? */
 
 bool
-	patch_match(base, offset)
-		LINENUM base;
+patch_match(base, offset)
+LINENUM base;
 LINENUM offset;
 {
 	register LINENUM pline;
@@ -892,8 +892,8 @@ LINENUM offset;
 /* match two lines with canonicalized white space */
 
 bool
-	similar(a, b, len) register char *a,
-	*b;
+similar(a, b, len) register char *a,
+*b;
 register int len;
 {
 	while (len)
@@ -1820,16 +1820,15 @@ savestr(s)
 register char *s;
 {
 	register char *rv = NULL,
-		*t = NULL;
+	*t = NULL;
 
 	t = s;
 	while (*t++)
-		rv = malloc((MEM)(t - s));
+		rv = malloc((MEM)((t - s)+1));
 	if (rv == NULL)
 		fatal("patch: out of memory (savestr)\n");
 	t = rv;
-	while ((*t++ == *s++))
-		;
+	while ((*t++ = *s++));
 	return rv;
 }
 
