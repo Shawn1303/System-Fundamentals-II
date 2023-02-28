@@ -334,6 +334,12 @@ void reinitialize_almost_everything()
 		filearg[0] = Nullch;
 	}
 
+	if (filearg[1] != Nullch)
+	{
+		free(filearg[1]);
+		filearg[1] = Nullch;
+	}
+
 	if (outname != Nullch)
 	{
 		free(outname);
@@ -1821,13 +1827,13 @@ char *
 savestr(s)
 register char *s;
 {
+	if (s == NULL)
+		return NULL;
 	register char *rv = NULL,
 	*t = NULL;
 
 	t = s;
 	while ((*t++));
-		// rv = malloc((MEM)((t - s)+1));
-		// rv = malloc((MEM)(t - s));
 	rv = malloc((MEM)(t - s));
 	if (rv == NULL)
 		fatal("patch: out of memory (savestr)\n");
