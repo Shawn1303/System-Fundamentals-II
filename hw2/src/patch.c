@@ -316,10 +316,6 @@ char **argv;
 		}
 		set_signals();
 	}
-	// if (origext != Nullch) {
-	// 	free(origext);
-	// 	origext = Nullch;
-	// }
 	fclose(pfp);
 	my_exit(0);
 }
