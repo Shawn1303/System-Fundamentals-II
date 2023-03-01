@@ -396,6 +396,8 @@ void get_some_switches()
 		}
 		else
 		{
+			if (s[2] != '\0')
+				continue;
 			switch (*++s)
 			{
 			case 'b':
