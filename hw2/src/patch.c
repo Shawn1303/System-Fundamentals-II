@@ -954,8 +954,10 @@ void re_input()
 		i_size = 0;
 		/*NOSTRICT*/
 		if (i_ptr != Null(char **)){
-			free((char *)i_womp);
 			free((char *)i_ptr);
+		}
+		if (i_womp != Nullch) {
+			free((char *)i_womp);
 		}
 		i_womp = Nullch;
 		i_ptr = Null(char **);
