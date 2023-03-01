@@ -35,6 +35,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdarg.h>
+#include <getopt.h>
 
 /* constants */
 
@@ -392,8 +393,6 @@ void get_some_switches()
 		}
 		else
 		{
-			if (s[2] != '\0')
-				continue;
 			switch (*++s)
 			{
 			case 'b':
@@ -444,6 +443,7 @@ void get_some_switches()
 #ifdef DEBUGGING
 			case 'x':
 				debug = atoi(s + 1);
+				break;
 #endif
 			default:
 				fatal("Unrecognized switch: %s\n", Argv[0]);
