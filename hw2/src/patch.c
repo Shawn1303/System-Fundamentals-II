@@ -348,7 +348,8 @@ void reinitialize_almost_everything()
 		outname = Nullch;
 	}
 
-	if (origext != Nullch) {
+	if (origext != Nullch)
+	{
 		free(origext);
 		origext = Nullch;
 	}
@@ -373,83 +374,212 @@ void reinitialize_almost_everything()
 
 void get_some_switches()
 {
-	register char *s;
+	int opt;
+	int longindex = 0;
+	struct option longopts[] = {
+		{"backup-extension", required_argument, NULL, 'b'},
+		{"context-diff", no_argument, NULL, 'c'},
+		{"directory", required_argument, NULL, 'd'},
+		{"do-defines", required_argument, NULL, 'D'},
+		{"ed-script", no_argument, NULL, 'e'},
+		{"loose-matching", no_argument, NULL, 'l'},
+		{"normal-diff", no_argument, NULL, 'n'},
+		{"output-file", required_argument, NULL, 'o'},
+		{"pathnames", no_argument, NULL, 'p'},
+		{"reject-file", required_argument, NULL, 'r'},
+		{"reverse", no_argument, NULL, 'R'},
+		{"silent", no_argument, NULL, 's'},
+		{"debug", required_argument, NULL, 'x'},
+		{0, 0, 0, 0}};
+
+	// register char *s;
 
 	rejname[0] = '\0';
+
 	if (!Argc)
 		return;
-	for (Argc--, Argv++; Argc; Argc--, Argv++)
+	// for (Argc--, Argv++; Argc; Argc--, Argv++)
+	// while ((opt = getopt_long(Argc, Argv, "b:cd:D:elno:pRr:sx:", longopts, &longindex)) != -1)
+	while (optind < Argc)
 	{
-		s = Argv[0];
-		if (strEQ(s, "+"))
+		// s = Argv[0];
+		// if (strEQ(s, "+"))
+		// {
+		// 	return; /* + will be skipped by for loop */
+		// }
+		// if (*s != '-' || !s[1])
+		// {
+		// 	if (filec == MAXFILEC)
+		// 		fatal("Too many file arguments.\n");
+		// 	filearg[filec++] = savestr(s);
+		// }
+		// else
+		// {
+		// int Argctemp = Argc;
+		// char **Argvtemp = Argv;
+		opt = getopt_long(Argc, Argv, "b:cd:D:elno:pRr:sx:", longopts, &longindex);
+		switch (opt)
 		{
-			return; /* + will be skipped by for loop */
-		}
-		if (*s != '-' || !s[1])
-		{
+		case 'b':
+			origext = savestr(optarg);
+			break;
+		case 'c':
+			diff_type = CONTEXT_DIFF;
+			break;
+		case 'd':
+			if (chdir(optarg) < 0)
+				fatal("Can't cd to %s.\n", optarg);
+			break;
+		case 'D':
+			do_defines++;
+			Sprintf(if_defined, "#ifdef %s\n", optarg);
+			Sprintf(not_defined, "#ifndef %s\n", optarg);
+			Sprintf(end_defined, "#endif %s\n", optarg);
+			break;
+		case 'e':
+			diff_type = ED_DIFF;
+			break;
+		case 'l':
+			canonicalize = TRUE;
+			break;
+		case 'n':
+			diff_type = NORMAL_DIFF;
+			break;
+		case 'o':
+			outname = savestr(optarg);
+			break;
+		case 'p':
+			usepath = TRUE; /* do not strip path names */
+			break;
+		case 'r':
+			Strcpy(rejname, optarg);
+			break;
+		case 'R':
+			reverse = TRUE;
+			break;
+		case 's':
+			verbose = FALSE;
+			break;
+#ifdef DEBUGGING
+		case 'x':
+			debug = atoi(optarg);
+			break;
+#endif
+		case '?':
+			fatal("Unrecognized switch: %s\n", opt);
+			break;
+		default:
 			if (filec == MAXFILEC)
 				fatal("Too many file arguments.\n");
-			filearg[filec++] = savestr(s);
-		}
-		else
-		{
-			switch (*++s)
-			{
-			case 'b':
-				origext = savestr(Argv[1]);
-				Argc--, Argv++;
-				break;
-			case 'c':
-				diff_type = CONTEXT_DIFF;
-				break;
-			case 'd':
-				if (chdir(Argv[1]) < 0)
-					fatal("Can't cd to %s.\n", Argv[1]);
-				Argc--, Argv++;
-				break;
-			case 'D':
-				do_defines++;
-				Sprintf(if_defined, "#ifdef %s\n", Argv[1]);
-				Sprintf(not_defined, "#ifndef %s\n", Argv[1]);
-				Sprintf(end_defined, "#endif %s\n", Argv[1]);
-				Argc--, Argv++;
-				break;
-			case 'e':
-				diff_type = ED_DIFF;
-				break;
-			case 'l':
-				canonicalize = TRUE;
-				break;
-			case 'n':
-				diff_type = NORMAL_DIFF;
-				break;
-			case 'o':
-				outname = savestr(Argv[1]);
-				Argc--, Argv++;
-				break;
-			case 'p':
-				usepath = TRUE; /* do not strip path names */
-				break;
-			case 'r':
-				Strcpy(rejname, Argv[1]);
-				Argc--, Argv++;
-				break;
-			case 'R':
-				reverse = TRUE;
-				break;
-			case 's':
-				verbose = FALSE;
-				break;
-#ifdef DEBUGGING
-			case 'x':
-				debug = atoi(s + 1);
-				break;
-#endif
-			default:
-				fatal("Unrecognized switch: %s\n", Argv[0]);
-			}
+			filearg[filec++] = savestr(Argv[optind]);
+			optind++;
 		}
 	}
+
+	// for (Argc--, Argv++; Argc; Argc--, Argv++)
+	// {
+	// 	s = Argv[0];
+	// 	if (strEQ(s, "+"))
+	// 	{
+	// 		return; /* + will be skipped by for loop */
+	// 	}
+	// 	if (*s != '-' || !s[1])
+	// 	{
+	// 		if (filec == MAXFILEC)
+	// 			fatal("Too many file arguments.\n");
+	// 		filearg[filec++] = savestr(s);
+	// 	}
+	// }
+
+	// if (optind < Argc) {
+	// 	for (;optind < Argc; optind++) {
+	// 		if (strEQ(Argv[optind], "+"))
+	// 		{
+	// 			return; /* + will be skipped by for loop */
+	// 		}
+	// 		if (filec == MAXFILEC)
+	// 			fatal("Too many file arguments.\n");
+	// 		filearg[filec++] = savestr(Argv[optind]);
+	// 	}
+	// }
+
+	// 	register char *s;
+
+	// 	rejname[0] = '\0';
+	// 	if (!Argc)
+	// 		return;
+	// 	for (Argc--, Argv++; Argc; Argc--, Argv++)
+	// 	{
+	// 		s = Argv[0];
+	// 		if (strEQ(s, "+"))
+	// 		{
+	// 			return; /* + will be skipped by for loop */
+	// 		}
+	// 		if (*s != '-' || !s[1])
+	// 		{
+	// 			if (filec == MAXFILEC)
+	// 				fatal("Too many file arguments.\n");
+	// 			filearg[filec++] = savestr(s);
+	// 		}
+	// 		else
+	// 		{
+	// 			switch (*++s)
+	// 			{
+	// 			case 'b':
+	// 				origext = savestr(Argv[1]);
+	// 				Argc--, Argv++;
+	// 				break;
+	// 			case 'c':
+	// 				diff_type = CONTEXT_DIFF;
+	// 				break;
+	// 			case 'd':
+	// 				if (chdir(Argv[1]) < 0)
+	// 					fatal("Can't cd to %s.\n", Argv[1]);
+	// 				Argc--, Argv++;
+	// 				break;
+	// 			case 'D':
+	// 				do_defines++;
+	// 				Sprintf(if_defined, "#ifdef %s\n", Argv[1]);
+	// 				Sprintf(not_defined, "#ifndef %s\n", Argv[1]);
+	// 				Sprintf(end_defined, "#endif %s\n", Argv[1]);
+	// 				Argc--, Argv++;
+	// 				break;
+	// 			case 'e':
+	// 				diff_type = ED_DIFF;
+	// 				break;
+	// 			case 'l':
+	// 				canonicalize = TRUE;
+	// 				break;
+	// 			case 'n':
+	// 				diff_type = NORMAL_DIFF;
+	// 				break;
+	// 			case 'o':
+	// 				outname = savestr(Argv[1]);
+	// 				Argc--, Argv++;
+	// 				break;
+	// 			case 'p':
+	// 				usepath = TRUE; /* do not strip path names */
+	// 				break;
+	// 			case 'r':
+	// 				Strcpy(rejname, Argv[1]);
+	// 				Argc--, Argv++;
+	// 				break;
+	// 			case 'R':
+	// 				reverse = TRUE;
+	// 				break;
+	// 			case 's':
+	// 				verbose = FALSE;
+	// 				break;
+	// #ifdef DEBUGGING
+	// 			case 'x':
+	// 				debug = atoi(s + 1);
+	// 				break;
+	// #endif
+	// 			default:
+	// 				fatal("Unrecognized switch: %s\n", Argv[0]);
+	// 			}
+	// 		}
+	// 	}
 }
 
 LINENUM
@@ -878,8 +1008,8 @@ void dump_line(line)
 /* does the patch pattern match at line base+offset? */
 
 bool
-patch_match(base, offset)
-LINENUM base;
+	patch_match(base, offset)
+		LINENUM base;
 LINENUM offset;
 {
 	register LINENUM pline;
@@ -906,8 +1036,8 @@ LINENUM offset;
 /* match two lines with canonicalized white space */
 
 bool
-similar(a, b, len) register char *a,
-*b;
+	similar(a, b, len) register char *a,
+	*b;
 register int len;
 {
 	while (len)
@@ -951,10 +1081,12 @@ void re_input()
 	{
 		i_size = 0;
 		/*NOSTRICT*/
-		if (i_ptr != Null(char **)){
+		if (i_ptr != Null(char **))
+		{
 			free((char *)i_ptr);
 		}
-		if (i_womp != Nullch) {
+		if (i_womp != Nullch)
+		{
 			free((char *)i_womp);
 		}
 		i_womp = Nullch;
@@ -1332,11 +1464,13 @@ int intuit_diff_type()
 			{
 				if (oldname && newname)
 				{
-					if (strlen(oldname) < strlen(newname)) {
+					if (strlen(oldname) < strlen(newname))
+					{
 						filearg[0] = oldname;
 						free(newname);
 					}
-					else {
+					else
+					{
 						filearg[0] = newname;
 						free(oldname);
 					}
@@ -1842,16 +1976,18 @@ savestr(s)
 register char *s;
 {
 	register char *rv = NULL,
-	*t = NULL;
+				  *t = NULL;
 	if (s == NULL)
 		return NULL;
 	t = s;
-	while ((*t++));
+	while ((*t++))
+		;
 	rv = malloc((MEM)(t - s));
 	if (rv == NULL)
 		fatal("patch: out of memory (savestr)\n");
 	t = rv;
-	while ((*t++ = *s++));
+	while ((*t++ = *s++))
+		;
 	return rv;
 }
 
