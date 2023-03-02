@@ -395,6 +395,7 @@ void get_some_switches()
 	// register char *s;
 
 	rejname[0] = '\0';
+	optind = optind? : 1;
 
 	if (!Argc)
 		return;
@@ -417,9 +418,19 @@ void get_some_switches()
 		// {
 		// int Argctemp = Argc;
 		// char **Argvtemp = Argv;
-		opt = getopt_long(Argc, Argv, "+b:cd:D:elno:pRr:sx:", longopts, &longindex);
+		opt = getopt_long(Argc, Argv, "-b:cd:D:elno:pRr:sx:", longopts, &longindex);
 		switch (opt)
 		{
+		case 1:
+			if (strEQ(Argv[optind - 1], "+"))
+			{
+				// optind++;
+				return; /* + will be skipped by for loop */
+			}
+			if (filec == MAXFILEC)
+				fatal("Too many file arguments.\n");
+			filearg[filec++] = savestr(Argv[optind - 1]);
+			break;
 		case 'b':
 			origext = savestr(optarg);
 			break;
@@ -465,19 +476,19 @@ void get_some_switches()
 			debug = atoi(optarg);
 			break;
 #endif
-		case '?':
-			fatal("Unrecognized switch: %s\n", opt);
-			break;
+		// case '?':
+		// 	break;
 		default:
-			if (strEQ(Argv[optind], "+"))
-			{
-				optind++;
-				return; /* + will be skipped by for loop */
-			}
-			if (filec == MAXFILEC)
-				fatal("Too many file arguments.\n");
-			filearg[filec++] = savestr(Argv[optind]);
-			optind++;
+			fatal("Unrecognized switch: %s\n", opt);
+			// if (strEQ(Argv[optind], "+"))
+			// {
+			// 	// optind++;
+			// 	return; /* + will be skipped by for loop */
+			// }
+			// if (filec == MAXFILEC)
+			// 	fatal("Too many file arguments.\n");
+			// filearg[filec++] = savestr(Argv[optind]);
+			// optind++;
 		}
 	}
 
