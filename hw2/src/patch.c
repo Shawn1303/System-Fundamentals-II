@@ -417,7 +417,7 @@ void get_some_switches()
 		// {
 		// int Argctemp = Argc;
 		// char **Argvtemp = Argv;
-		opt = getopt_long(Argc, Argv, "b:cd:D:elno:pRr:sx:", longopts, &longindex);
+		opt = getopt_long(Argc, Argv, "+b:cd:D:elno:pRr:sx:", longopts, &longindex);
 		switch (opt)
 		{
 		case 'b':
@@ -469,6 +469,11 @@ void get_some_switches()
 			fatal("Unrecognized switch: %s\n", opt);
 			break;
 		default:
+			if (strEQ(Argv[optind], "+"))
+			{
+				optind++;
+				return; /* + will be skipped by for loop */
+			}
 			if (filec == MAXFILEC)
 				fatal("Too many file arguments.\n");
 			filearg[filec++] = savestr(Argv[optind]);
