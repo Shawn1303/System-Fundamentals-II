@@ -395,7 +395,7 @@ void get_some_switches()
 	// register char *s;
 
 	rejname[0] = '\0';
-	optind = optind? : 1;
+	// optind = optind ? optind : 1;
 
 	if (!Argc)
 		return;
