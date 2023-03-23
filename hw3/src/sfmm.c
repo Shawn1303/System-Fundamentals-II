@@ -17,10 +17,18 @@
 
 // read the size in the header
 #define GET_SIZE(p) (GET(p) & ~0x7)
-//get allocated field
+//get pre-allocated field
 #define GET_PREALLOC(p) (GET(p) & 0x2)
+//get allocated field
+#define GET_ALLOC(p) (GET(p) & 0x1)
+//get in-quicklist field
+#define GET_INQUICKLIST(p) (GET(p) & 0x4)
 //get footer from header address
-#define GET_FOOTER_FROM_HEADER(p) ((sf_footer *)((void *)(p) + GET_SIZE(p) - 8))
+#define GET_FOOTER_FROM_HEADER(p) ((sf_block *)((void *)(p) + GET_SIZE(p) - sizeof(sf_header)))
+//get header from footer address
+#define GET_HEADER_FROM_FOOTER(p) ((sf_block *)((void *)(p) - GET_SIZE(p) + sizeof(sf_header)))
+//get header from payload
+#define GET_HEADER_FROM_PAYLOAD(p) ((sf_block *)((void *)(p) - sizeof(sf_header)))
 
 void *sf_malloc(size_t size)
 {
@@ -107,7 +115,9 @@ void *sf_malloc(size_t size)
 			return NULL;
 		}
 	}
-	// debug("%p", (size_t *)sf_mem_start());
+	// debug("%p", sf_mem_start() + 4096);
+	// debug("%p", sf_mem_end());
+
 	// debug("%p", &(((sf_block *)(sf_mem_start()))->header));
 	//find free block in quicklist
 
@@ -121,8 +131,14 @@ void *sf_malloc(size_t size)
 	if (sizeNeeded < 32) {
 		sizeFreeNeeded = 32;
 	} else {
-		sizeFreeNeeded = 8 - (sizeNeeded % 8) + sizeNeeded;
+		// debug("%zu", sizeNeeded);
+		if(sizeNeeded % 8 != 0) {
+			sizeFreeNeeded = 8 - (sizeNeeded % 8) + sizeNeeded;
+		} else {
+			sizeFreeNeeded = sizeNeeded;
+		}
 	}
+	// debug("%zu", sizeFreeNeeded);
 	//get quicklist index needed
 	size_t sizeMatchQuickIndex = sizeFreeNeeded / 8;
 	//if there is a block avaliable, use it
@@ -135,6 +151,8 @@ void *sf_malloc(size_t size)
 			sf_quick_lists[sizeMatchQuickIndex].first = sf_quick_lists[sizeMatchQuickIndex].first->body.links.next;
 			//decrease length of quicklist
 			sf_quick_lists[sizeMatchQuickIndex].length -= 1;
+			//set in-quicklist to 0
+			toBeAllocated->header = GET_SIZE(toBeAllocated) || GET_ALLOC(toBeAllocated) || GET_PREV_ALLOC(toBeAllocated);
 		}
 	}
 
@@ -144,7 +162,7 @@ void *sf_malloc(size_t size)
 		//pointer to free block in main free list
 		sf_block *freeBlockPtr = NULL;
 		//search main free list for free space
-		for (int i = 0; i < 10; i++) {
+		for (int i = 0; i < NUM_FREE_LISTS; i++) {
 			//check if there's free blocks and if sizeNeeded <= M
 			if ((sf_free_list_heads[i].body.links.next != &sf_free_list_heads[i] && sizeFreeNeeded <= M) || (i == 9 && sizeFreeNeeded > (M >> 1))) {
 				freeBlockPtr = sf_free_list_heads[i].body.links.next;
@@ -171,7 +189,55 @@ void *sf_malloc(size_t size)
 	}
 
 	//use for calling second mem_grow if needed
-
+	// void *currSpacePtr = sf_mem_end();
+	while(!toBeAllocated) {
+		// void *oldEnd = sf_mem_end();
+		void *newSpacePtr;
+		if((newSpacePtr = sf_mem_grow())) {
+			// debug("Old: %p", oldEnd);
+			// debug("New: %p", newSpacePtr);
+			//coalescing free block before new space
+			//set new epilogue
+			PUT(sf_mem_end() - sizeof(sf_header), THIS_BLOCK_ALLOCATED);
+			//set old epilogue to header with new free size
+			PUT(GET_HEADER_FROM_PAYLOAD(newSpacePtr), (sf_mem_end() - newSpacePtr) | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(newSpacePtr)));
+			//if previous block is free
+			//newSpacePtr at the end of the heap
+			if(GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(newSpacePtr)) == 0) {
+				//get previous block
+				//pointer at header
+				sf_block *prevBlockPtr = GET_HEADER_FROM_FOOTER((newSpacePtr - 16));
+				// debug("PrevFreeBlock: %zu", GET_SIZE(prevBlockPtr));
+				//set header of new free block
+				PUT(prevBlockPtr, (GET_SIZE(prevBlockPtr) + GET_SIZE(GET_HEADER_FROM_PAYLOAD(newSpacePtr))) | GET_PREALLOC(prevBlockPtr));
+				// debug("%zu", (sf_mem_end() - newSpacePtr));
+				// debug("%p", newSpacePtr);
+				// debug("%p", sf_mem_end());
+				//set footer of new free block
+				PUT(GET_FOOTER_FROM_HEADER(prevBlockPtr), GET(prevBlockPtr));
+				//set toBeAllocated to new free block if size is enough
+				// debug("NewFreeBlock: %zu", GET_SIZE(prevBlockPtr));
+				if(GET_SIZE(prevBlockPtr) >= sizeFreeNeeded) {
+					// debug("%zu", sizeFreeNeeded);
+					//remove free block from main free list if using this free block
+					// sf_block *temp = prevBlockPtr->body.links.prev;
+					prevBlockPtr->body.links.prev->body.links.next = prevBlockPtr->body.links.next;
+					prevBlockPtr->body.links.next->body.links.prev = prevBlockPtr->body.links.prev;
+					toBeAllocated = prevBlockPtr;
+					// sf_show_heap();
+					// debug("%p", toBeAllocated);
+				}
+			} else {
+				if(GET_SIZE(GET_HEADER_FROM_PAYLOAD(newSpacePtr)) >= sizeFreeNeeded) {
+					toBeAllocated = GET_HEADER_FROM_PAYLOAD(newSpacePtr);
+				}
+			}
+		} else {
+			//no more space
+			sf_errno = ENOMEM;
+			return NULL;
+		}
+	}
 
 
 
@@ -270,7 +336,19 @@ void *sf_malloc(size_t size)
 
 void sf_free(void *pp)
 {
-	// TO BE IMPLEMENTED
+	if(
+	!pp || //if pp is NULL
+	!((size_t)pp & 7) || //if not 8-byte aligned
+	(GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)) < 32 ) || //if size is < 32
+	!(GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)) % 8) || //if size is not a multiple of 8
+	(GET_HEADER_FROM_PAYLOAD(pp) < (sf_block *)(sf_mem_start() + 32)) || //if header is before end of prologue
+	(((void *)(GET_FOOTER_FROM_HEADER(GET_HEADER_FROM_PAYLOAD(pp))) + 8) > (sf_mem_end() - 8)) ||//if footer end is after epilogue
+	!(GET_ALLOC(GET_HEADER_FROM_PAYLOAD(pp))) || //if block is already free
+	GET_INQUICKLIST(GET_HEADER_FROM_PAYLOAD(pp)) || //block is in quicklist
+	(!(GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(pp))) && GET_ALLOC((void *)(GET_HEADER_FROM_PAYLOAD(pp)) - 8)) //prev_alloc of current is 0 but previous block is allocated
+	) {
+		abort();
+	}
 	abort();
 }
 
