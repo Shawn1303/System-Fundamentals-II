@@ -297,7 +297,7 @@ void *sf_malloc(size_t size)
 				prevBlockPtr = NULL;
 			}
 			//no more space
-			sf_show_heap();
+			// sf_show_heap();
 			sf_errno = ENOMEM;
 			return NULL;
 		}
@@ -388,8 +388,8 @@ void *sf_malloc(size_t size)
 
 
 		// debug("%zu", GET_SIZE(toBeAllocated));
-		debug("malloc");
-		sf_show_heap();
+		// debug("malloc");
+		// sf_show_heap();
 		return toBeAllocated->body.payload;
 	}
 
@@ -400,6 +400,7 @@ void *sf_malloc(size_t size)
 
 void sf_free(void *pp)
 {
+	//see if ptr valid
 	if(
 	!pp || //if pp is NULL
 	((size_t)pp & 7) || //if not 8-byte aligned
@@ -422,7 +423,7 @@ void sf_free(void *pp)
 	if(toBeFreeBlockSize <= (32 + (NUM_QUICK_LISTS - 1) * 8)) {
 		size_t quickListIndex = (toBeFreeBlockSize - 32) / 8;
 		//check if there's free blocks
-		if (sf_quick_lists[quickListIndex].length == 5) {
+		if (sf_quick_lists[quickListIndex].length == QUICK_LIST_MAX) {
 			//flush list
 			sf_block *flushBlock = sf_quick_lists[quickListIndex].first;
 			while(flushBlock) {
@@ -657,14 +658,166 @@ void sf_free(void *pp)
 				}
 		}
 	}
-	debug("Free");
-	sf_show_heap();
+	// debug("Free");
+	// sf_show_heap();
 }
 
 void *sf_realloc(void *pp, size_t rsize)
 {
-	// TO BE IMPLEMENTED
-	abort();
+	if(
+	!pp || //if pp is NULL
+	((size_t)pp & 7) || //if not 8-byte aligned
+	(GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)) < 32 ) || //if size is < 32
+	(GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)) % 8) || //if size is not a multiple of 8
+	(GET_HEADER_FROM_PAYLOAD(pp) < (sf_block *)(sf_mem_start() + 32)) || //if header is before end of prologue
+	(((void *)(GET_FOOTER_FROM_HEADER(GET_HEADER_FROM_PAYLOAD(pp))) + 8) > (sf_mem_end() - 8)) ||//if footer end is after epilogue
+	!(GET_ALLOC(GET_HEADER_FROM_PAYLOAD(pp))) || //if block is already free
+	GET_INQUICKLIST(GET_HEADER_FROM_PAYLOAD(pp)) || //block is in quicklist
+	(!(GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(pp))) && GET_ALLOC((void *)(GET_HEADER_FROM_PAYLOAD(pp)) - 8)) //prev_alloc of current is 0 but previous block is allocated
+	) {
+		//invalid
+		sf_errno = EINVAL;
+		return NULL;
+	}
+	//pointer is valid
+	if(rsize) {
+		//pp payload size
+		size_t payLoadSize = GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)) - 8;
+		//pp block size
+		size_t blockSize = payLoadSize + 8;
+		if(payLoadSize == rsize) {
+			//no change
+			return pp;
+		} else if(payLoadSize < rsize) {
+			//larger 
+			sf_block *largerBlock;
+			if((largerBlock = sf_malloc(rsize))) {
+				memcpy(largerBlock, pp, rsize);
+				sf_free(pp);
+				return largerBlock;
+			} else {
+				//malloc failed
+				return NULL;
+			}
+		} else {
+			//smaller
+			//split
+			size_t blockSizeNeed;
+			//set size needed
+			if(((rsize + 8) % 8)) {
+				blockSizeNeed = rsize + 8 + (8 - ((rsize + 8) % 8));
+			} else {
+				//if 0
+				blockSizeNeed = rsize + 8;
+			}
+			// debug("%zu", rsize);
+			// debug("blockSizeNeed: %zu", blockSizeNeed);
+
+			if(blockSizeNeed < 32) {
+				blockSizeNeed = 32;
+			}
+
+			// debug("blockSizeNeed: %zu", blockSizeNeed);
+			// debug("blockSize: %zu", blockSize);
+			// debug("pp size: %zu", GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)));
+
+			if((blockSize - blockSizeNeed) >= 32) {
+				//split
+				//copy memory
+				// memcpy(pp, pp, blockSizeNeed);
+				//change header of allocated block
+				PUT(GET_HEADER_FROM_PAYLOAD(pp), blockSizeNeed | GET_ALLOC(GET_HEADER_FROM_PAYLOAD(pp)) | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(pp)));
+				//split block
+				sf_block *splitBlock = (void *)(GET_HEADER_FROM_PAYLOAD(pp)) + blockSizeNeed;
+				//set header for split block
+				PUT(splitBlock, (blockSize - blockSizeNeed) | PREV_BLOCK_ALLOCATED);
+				//set footer for split block
+				PUT(GET_FOOTER_FROM_HEADER(splitBlock), GET(splitBlock));
+
+				//coallesce split block with next
+				sf_block *nextBlockOfSplit; 
+				if(!GET_ALLOC(nextBlockOfSplit = (sf_block *)((void *)(GET_FOOTER_FROM_HEADER(splitBlock)) + 8))) {
+					//remove nextBlock from main free
+					nextBlockOfSplit->body.links.prev->body.links.next = nextBlockOfSplit->body.links.next;
+					nextBlockOfSplit->body.links.next->body.links.prev = nextBlockOfSplit->body.links.prev;
+
+					//merge flushBlock and nextBlock
+					PUT(splitBlock, (GET_SIZE(splitBlock) + GET_SIZE(nextBlockOfSplit)) | GET_PREALLOC(splitBlock));
+					//set footer
+					PUT(GET_FOOTER_FROM_HEADER(splitBlock), GET(splitBlock));
+					//set next block's prev alloc to 0
+					PUT(
+						((void *)GET_FOOTER_FROM_HEADER(splitBlock) + 8), 
+						GET_SIZE(((void *)GET_FOOTER_FROM_HEADER(splitBlock) + 8)) | 
+						GET_ALLOC(((void *)GET_FOOTER_FROM_HEADER(splitBlock) + 8)) | 
+						GET_INQUICKLIST(((void *)GET_FOOTER_FROM_HEADER(splitBlock) + 8))
+						);
+				}
+
+				//add splitBlock to main free
+				size_t M = 32;
+				sf_block *temp;
+				for(int i = 0; i < NUM_FREE_LISTS; i++) {
+						//add first free block to the right index
+						if (i == 0) {
+							//range if size == M
+							if (GET_SIZE(splitBlock) == M) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = splitBlock;
+								//set 2->3
+								splitBlock->body.links.next = temp;
+								//set 2->1
+								splitBlock->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = splitBlock;
+							}
+						} else if (GET_SIZE(splitBlock) > M && GET_SIZE(splitBlock) <= (M << 1)) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = splitBlock;
+								//set 2->3
+								splitBlock->body.links.next = temp;
+								//set 2->1
+								splitBlock->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = splitBlock;
+						} else if(i == NUM_FREE_LISTS - 1) {
+							// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+							if(GET_SIZE(splitBlock) > (M << 1)) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = splitBlock;
+								//set 2->3
+								splitBlock->body.links.next = temp;
+								//set 2->1
+								splitBlock->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = splitBlock;
+							}
+						}
+						if (i != 0) {
+							M = M << 1;
+						}
+				}
+				return pp;
+			} else {
+				//don't split
+				// memcpy(pp, pp, blockSizeNeed);
+				// PUT(GET_HEADER_FROM_PAYLOAD(pp), blockSizeNeed | GET_ALLOC(GET_HEADER_FROM_PAYLOAD(pp)) | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(pp)));
+				return pp;
+			}
+		}
+	} 
+	//size 0
+	sf_free(pp);
+	return NULL;
 }
 
 void *sf_memalign(size_t size, size_t align)
