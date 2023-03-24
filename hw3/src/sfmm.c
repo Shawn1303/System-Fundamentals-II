@@ -822,7 +822,51 @@ void *sf_realloc(void *pp, size_t rsize)
 
 void *sf_memalign(size_t size, size_t align)
 {
-	// TO BE IMPLEMENTED
-	abort();
+	if(align >= 8 && !(align & (align - 1))) {
+		void *largerReqBlock;
+		if((largerReqBlock = sf_malloc(size + align + 32))) {
+			//get malloc
+				if((size_t)(largerReqBlock) % align) {
+					//if not aligned
+					//add 32 to free at least 32 bytes
+					void *alignedBlock;
+					size_t offsetOfAlign;
+					if(((size_t)((void *)(largerReqBlock) + 32) % align)) {
+						//if still not aligned
+						alignedBlock = (void *)(largerReqBlock) + 32 + (align - ((size_t)((void *)(largerReqBlock) + 32) % align));
+						offsetOfAlign = 32 + (align - ((size_t)((void *)(largerReqBlock) + 32) % align));
+					} else {
+						//if aligned
+						alignedBlock = (void *)(largerReqBlock) + 32;
+						offsetOfAlign = 32;
+					}
+					//set header of aligned block
+					PUT(GET_HEADER_FROM_PAYLOAD(alignedBlock), (GET_SIZE(GET_HEADER_FROM_PAYLOAD(largerReqBlock)) - offsetOfAlign) | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(largerReqBlock)) | THIS_BLOCK_ALLOCATED);
+					//set header of left to be free
+					PUT(GET_HEADER_FROM_PAYLOAD(largerReqBlock), offsetOfAlign | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(largerReqBlock)) | THIS_BLOCK_ALLOCATED);
+					//free left free
+					sf_free(largerReqBlock);
+
+					largerReqBlock = alignedBlock;
+				}
+				//set back half to be free
+				if((GET_SIZE(GET_HEADER_FROM_PAYLOAD(largerReqBlock)) - size - 8) >= 32) {
+					//update header of aligned block to be size + 8
+					PUT(GET_HEADER_FROM_PAYLOAD(largerReqBlock), (size + 8) | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(largerReqBlock)) | THIS_BLOCK_ALLOCATED);
+					//set header of right to be free
+					PUT(GET_HEADER_FROM_PAYLOAD((void *)(largerReqBlock) + size), (GET_SIZE(GET_HEADER_FROM_PAYLOAD(largerReqBlock)) - size - 8) | PREV_BLOCK_ALLOCATED | THIS_BLOCK_ALLOCATED);
+					//free right free
+					sf_free((void *)(largerReqBlock) + size);
+				}
+				//aligned
+				return largerReqBlock;
+		} else {
+			//allocate unsuccessful
+			//malloc sets sf_errno to ENOMEM
+			return NULL;
+		}
+	}
+	sf_errno = EINVAL;
+	return NULL;
 }
 
