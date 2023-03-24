@@ -140,7 +140,7 @@ void *sf_malloc(size_t size)
 	}
 	// debug("%zu", sizeFreeNeeded);
 	//get quicklist index needed
-	size_t sizeMatchQuickIndex = sizeFreeNeeded / 8;
+	size_t sizeMatchQuickIndex = ((sizeFreeNeeded - 32) / 8);
 	//if there is a block avaliable, use it
 	if(sizeMatchQuickIndex < NUM_QUICK_LISTS) {
 		//check if there's free blocks
@@ -152,7 +152,7 @@ void *sf_malloc(size_t size)
 			//decrease length of quicklist
 			sf_quick_lists[sizeMatchQuickIndex].length -= 1;
 			//set in-quicklist to 0
-			toBeAllocated->header = GET_SIZE(toBeAllocated) || GET_ALLOC(toBeAllocated) || GET_PREV_ALLOC(toBeAllocated);
+			toBeAllocated->header = GET_SIZE(toBeAllocated) || GET_ALLOC(toBeAllocated) || GET_PREALLOC(toBeAllocated);
 		}
 	}
 
@@ -193,6 +193,7 @@ void *sf_malloc(size_t size)
 	while(!toBeAllocated) {
 		// void *oldEnd = sf_mem_end();
 		void *newSpacePtr;
+		sf_block *prevBlockPtr;
 		if((newSpacePtr = sf_mem_grow())) {
 			// debug("Old: %p", oldEnd);
 			// debug("New: %p", newSpacePtr);
@@ -201,12 +202,17 @@ void *sf_malloc(size_t size)
 			PUT(sf_mem_end() - sizeof(sf_header), THIS_BLOCK_ALLOCATED);
 			//set old epilogue to header with new free size
 			PUT(GET_HEADER_FROM_PAYLOAD(newSpacePtr), (sf_mem_end() - newSpacePtr) | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(newSpacePtr)));
+			//set footer of old epilogue
+			PUT(GET_FOOTER_FROM_HEADER(GET_HEADER_FROM_PAYLOAD(newSpacePtr)), GET(GET_HEADER_FROM_PAYLOAD(newSpacePtr)));
 			//if previous block is free
 			//newSpacePtr at the end of the heap
 			if(GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(newSpacePtr)) == 0) {
 				//get previous block
 				//pointer at header
-				sf_block *prevBlockPtr = GET_HEADER_FROM_FOOTER((newSpacePtr - 16));
+				prevBlockPtr = GET_HEADER_FROM_FOOTER((newSpacePtr - 16));
+				//remove free block from main free list if using this free block
+				prevBlockPtr->body.links.prev->body.links.next = prevBlockPtr->body.links.next;
+				prevBlockPtr->body.links.next->body.links.prev = prevBlockPtr->body.links.prev;
 				// debug("PrevFreeBlock: %zu", GET_SIZE(prevBlockPtr));
 				//set header of new free block
 				PUT(prevBlockPtr, (GET_SIZE(prevBlockPtr) + GET_SIZE(GET_HEADER_FROM_PAYLOAD(newSpacePtr))) | GET_PREALLOC(prevBlockPtr));
@@ -221,9 +227,10 @@ void *sf_malloc(size_t size)
 					// debug("%zu", sizeFreeNeeded);
 					//remove free block from main free list if using this free block
 					// sf_block *temp = prevBlockPtr->body.links.prev;
-					prevBlockPtr->body.links.prev->body.links.next = prevBlockPtr->body.links.next;
-					prevBlockPtr->body.links.next->body.links.prev = prevBlockPtr->body.links.prev;
+					// prevBlockPtr->body.links.prev->body.links.next = prevBlockPtr->body.links.next;
+					// prevBlockPtr->body.links.next->body.links.prev = prevBlockPtr->body.links.prev;
 					toBeAllocated = prevBlockPtr;
+					prevBlockPtr = NULL;
 					// sf_show_heap();
 					// debug("%p", toBeAllocated);
 				}
@@ -233,7 +240,64 @@ void *sf_malloc(size_t size)
 				}
 			}
 		} else {
+			//add new free block to main free list
+			if(prevBlockPtr) {
+				size_t M = 32;
+				sf_block *temp;
+				for(int i = 0; i < NUM_FREE_LISTS; i++) {
+						//add first free block to the right index
+						if (i == 0) {
+							//range if size == M
+							if (GET_SIZE(prevBlockPtr) == M) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = prevBlockPtr;
+								//set 2->3
+								prevBlockPtr->body.links.next = temp;
+								//set 2->1
+								prevBlockPtr->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = prevBlockPtr;
+							}
+						} else if (GET_SIZE(prevBlockPtr) > M && GET_SIZE(prevBlockPtr) <= (M << 1)) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = prevBlockPtr;
+								//set 2->3
+								prevBlockPtr->body.links.next = temp;
+								//set 2->1
+								prevBlockPtr->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = prevBlockPtr;
+						} else if(i == NUM_FREE_LISTS - 1) {
+							// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+							if(GET_SIZE(prevBlockPtr) > (M << 1)) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = prevBlockPtr;
+								//set 2->3
+								prevBlockPtr->body.links.next = temp;
+								//set 2->1
+								prevBlockPtr->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = prevBlockPtr;
+							}
+						}
+						if (i != 0) {
+							M = M << 1;
+						}
+				} 
+				//reset prevBlockPtr
+				prevBlockPtr = NULL;
+			}
 			//no more space
+			sf_show_heap();
 			sf_errno = ENOMEM;
 			return NULL;
 		}
@@ -263,7 +327,7 @@ void *sf_malloc(size_t size)
 			//set header for new free block
 			newFreeBlockPtr->header = (toBeAllocatedBlockSize - sizeFreeNeeded) | PREV_BLOCK_ALLOCATED;
 			//set footer to header values
-			((sf_block *)GET_FOOTER_FROM_HEADER(newFreeBlockPtr))->header = newFreeBlockPtr->header;
+			((sf_block *)GET_FOOTER_FROM_HEADER(newFreeBlockPtr))->header = GET(newFreeBlockPtr);
 
 			//add new free block to main free list
 			size_t M = 32;
@@ -272,7 +336,6 @@ void *sf_malloc(size_t size)
 					//add first free block to the right index
 					if (i == 0) {
 						//range if size == M
-						//FIX THIS FOR ADDING TO FREE LIST ---------------------------------------------------------------------------------------------------------
 						if ((toBeAllocatedBlockSize - sizeFreeNeeded) == M) {
 							// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
 							//preserve 3
@@ -325,7 +388,8 @@ void *sf_malloc(size_t size)
 
 
 		// debug("%zu", GET_SIZE(toBeAllocated));
-		// sf_show_heap();
+		debug("malloc");
+		sf_show_heap();
 		return toBeAllocated->body.payload;
 	}
 
@@ -338,9 +402,9 @@ void sf_free(void *pp)
 {
 	if(
 	!pp || //if pp is NULL
-	!((size_t)pp & 7) || //if not 8-byte aligned
+	((size_t)pp & 7) || //if not 8-byte aligned
 	(GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)) < 32 ) || //if size is < 32
-	!(GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)) % 8) || //if size is not a multiple of 8
+	(GET_SIZE(GET_HEADER_FROM_PAYLOAD(pp)) % 8) || //if size is not a multiple of 8
 	(GET_HEADER_FROM_PAYLOAD(pp) < (sf_block *)(sf_mem_start() + 32)) || //if header is before end of prologue
 	(((void *)(GET_FOOTER_FROM_HEADER(GET_HEADER_FROM_PAYLOAD(pp))) + 8) > (sf_mem_end() - 8)) ||//if footer end is after epilogue
 	!(GET_ALLOC(GET_HEADER_FROM_PAYLOAD(pp))) || //if block is already free
@@ -349,7 +413,252 @@ void sf_free(void *pp)
 	) {
 		abort();
 	}
-	abort();
+	//header of block to be freed
+	sf_block *freeBlock = GET_HEADER_FROM_PAYLOAD(pp);
+
+	//size of block to be freed
+	size_t toBeFreeBlockSize = GET_SIZE(freeBlock);
+	//if block fit in quick list
+	if(toBeFreeBlockSize <= (32 + (NUM_QUICK_LISTS - 1) * 8)) {
+		size_t quickListIndex = (toBeFreeBlockSize - 32) / 8;
+		//check if there's free blocks
+		if (sf_quick_lists[quickListIndex].length == 5) {
+			//flush list
+			sf_block *flushBlock = sf_quick_lists[quickListIndex].first;
+			while(flushBlock) {
+				//remove from quick list
+				sf_quick_lists[quickListIndex].first = flushBlock->body.links.next;
+				sf_quick_lists[quickListIndex].length -= 1;
+
+				//set inQuickList to 0 and alloc to 0
+				PUT(flushBlock, GET_SIZE(flushBlock) | GET_PREALLOC(flushBlock));
+				//set footer
+				PUT(GET_FOOTER_FROM_HEADER(flushBlock), GET(flushBlock));
+				//set next block's prev alloc to 0
+				PUT(
+					((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8), 
+					GET_SIZE(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8)) | 
+					GET_ALLOC(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8)) | 
+					GET_INQUICKLIST(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8))
+					);
+
+				//coalesce flushblock with previous block
+				if(!GET_PREALLOC(flushBlock)) {
+					//get header of previous block
+					sf_block *prevBlock = GET_HEADER_FROM_FOOTER((void *)flushBlock - 8);
+
+					//remove prevBlock from main free
+					prevBlock->body.links.prev->body.links.next = prevBlock->body.links.next;
+					prevBlock->body.links.next->body.links.prev = prevBlock->body.links.prev;
+
+					//merge prevBlock and flushBlock
+					PUT(prevBlock, (GET_SIZE(prevBlock) + GET_SIZE(flushBlock)) | GET_PREALLOC(prevBlock));
+					//set footer
+					PUT(GET_FOOTER_FROM_HEADER(prevBlock), GET(prevBlock));
+					//set next block's prev alloc to 0
+					PUT(
+						((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8), 
+						GET_SIZE(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8)) | 
+						GET_ALLOC(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8)) | 
+						GET_INQUICKLIST(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8))
+						);
+					flushBlock = prevBlock;
+				}
+				//coalesce flushblock with next block
+				sf_block *nextBlock; 
+				if(!GET_ALLOC(nextBlock = (sf_block *)((void *)(GET_FOOTER_FROM_HEADER(flushBlock)) + 8))) {
+					//remove nextBlock from main free
+					nextBlock->body.links.prev->body.links.next = nextBlock->body.links.next;
+					nextBlock->body.links.next->body.links.prev = nextBlock->body.links.prev;
+
+					//merge flushBlock and nextBlock
+					PUT(flushBlock, (GET_SIZE(flushBlock) + GET_SIZE(nextBlock)) | GET_PREALLOC(flushBlock));
+					//set footer
+					PUT(GET_FOOTER_FROM_HEADER(flushBlock), GET(flushBlock));
+					//set next block's prev alloc to 0
+					PUT(
+						((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8), 
+						GET_SIZE(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8)) | 
+						GET_ALLOC(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8)) | 
+						GET_INQUICKLIST(((void *)GET_FOOTER_FROM_HEADER(flushBlock) + 8))
+						);
+				}
+
+				//add to main free list
+				size_t M = 32;
+				sf_block *temp;
+				for(int i = 0; i < NUM_FREE_LISTS; i++) {
+						//add first free block to the right index
+						if (i == 0) {
+							//range if size == M
+							if (GET_SIZE(flushBlock) == M) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = flushBlock;
+								//set 2->3
+								flushBlock->body.links.next = temp;
+								//set 2->1
+								flushBlock->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = flushBlock;
+							}
+						} else if (GET_SIZE(flushBlock) > M && GET_SIZE(flushBlock) <= (M << 1)) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = flushBlock;
+								//set 2->3
+								flushBlock->body.links.next = temp;
+								//set 2->1
+								flushBlock->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = flushBlock;
+						} else if(i == NUM_FREE_LISTS - 1) {
+							// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+							if(GET_SIZE(flushBlock) > (M << 1)) {
+								// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+								//preserve 3
+								temp = sf_free_list_heads[i].body.links.next;
+								//set 1->2
+								sf_free_list_heads[i].body.links.next = flushBlock;
+								//set 2->3
+								flushBlock->body.links.next = temp;
+								//set 2->1
+								flushBlock->body.links.prev = &sf_free_list_heads[i];
+								//set 3->2
+								temp->body.links.prev = flushBlock;
+							}
+						}
+						if (i != 0) {
+							M = M << 1;
+						}
+				}
+				//get next flushblock 
+				flushBlock = sf_quick_lists[quickListIndex].first;
+			}
+		}
+		//add to quick list
+		freeBlock->body.links.next = sf_quick_lists[quickListIndex].first;
+		sf_quick_lists[quickListIndex].first = freeBlock;
+		sf_quick_lists[quickListIndex].length += 1;
+
+		//update header to in quick list
+		PUT(freeBlock, toBeFreeBlockSize | GET_ALLOC(freeBlock) | GET_PREALLOC(freeBlock) | IN_QUICK_LIST);
+	} else {
+		//free block is the block being freed if can't fit in quick list
+
+		//set alloc to 0
+		PUT(freeBlock, GET_SIZE(freeBlock) | GET_PREALLOC(freeBlock));
+		//set footer
+		PUT(GET_FOOTER_FROM_HEADER(freeBlock), GET(freeBlock));
+		//set next block's prev alloc to 0
+		PUT(
+			((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8), 
+			GET_SIZE(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8)) | 
+			GET_ALLOC(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8)) | 
+			GET_INQUICKLIST(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8))
+			);
+
+		//coalesce freeBlock with prev
+		if(!GET_PREALLOC(freeBlock)) {
+			//get header of previous block
+			sf_block *prevBlockOfFree = GET_HEADER_FROM_FOOTER((void *)freeBlock - 8);
+
+			//remove prevBlock from main free
+			prevBlockOfFree->body.links.prev->body.links.next = prevBlockOfFree->body.links.next;
+			prevBlockOfFree->body.links.next->body.links.prev = prevBlockOfFree->body.links.prev;
+
+			//merge prevBlock and freeBlock
+			PUT(prevBlockOfFree, (GET_SIZE(prevBlockOfFree) + GET_SIZE(freeBlock)) | GET_PREALLOC(prevBlockOfFree));
+			//set footer
+			PUT(GET_FOOTER_FROM_HEADER(prevBlockOfFree), GET(prevBlockOfFree));
+			freeBlock = prevBlockOfFree;
+			//set next block's prev alloc to 0
+			PUT(
+				((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8), 
+				GET_SIZE(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8)) | 
+				GET_ALLOC(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8)) | 
+				GET_INQUICKLIST(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8))
+				);
+		}
+		//coalesce freeBlock with next 
+		sf_block *nextBlockOfFree; 
+		if(!GET_ALLOC(nextBlockOfFree = (sf_block *)((void *)(GET_FOOTER_FROM_HEADER(freeBlock)) + 8))) {
+			//remove nextBlock from main free
+			nextBlockOfFree->body.links.prev->body.links.next = nextBlockOfFree->body.links.next;
+			nextBlockOfFree->body.links.next->body.links.prev = nextBlockOfFree->body.links.prev;
+
+			//merge flushBlock and nextBlock
+			PUT(freeBlock, (GET_SIZE(freeBlock) + GET_SIZE(nextBlockOfFree)) | GET_PREALLOC(freeBlock));
+			//set footer
+			PUT(GET_FOOTER_FROM_HEADER(freeBlock), GET(freeBlock));
+			//set next block's prev alloc to 0
+			PUT(
+				((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8), 
+				GET_SIZE(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8)) | 
+				GET_ALLOC(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8)) | 
+				GET_INQUICKLIST(((void *)GET_FOOTER_FROM_HEADER(freeBlock) + 8))
+				);
+		}
+
+		//add to main free list
+		size_t M = 32;
+		sf_block *temp;
+		for(int i = 0; i < NUM_FREE_LISTS; i++) {
+				//add first free block to the right index
+				if (i == 0) {
+					//range if size == M
+					if (GET_SIZE(freeBlock) == M) {
+						// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+						//preserve 3
+						temp = sf_free_list_heads[i].body.links.next;
+						//set 1->2
+						sf_free_list_heads[i].body.links.next = freeBlock;
+						//set 2->3
+						freeBlock->body.links.next = temp;
+						//set 2->1
+						freeBlock->body.links.prev = &sf_free_list_heads[i];
+						//set 3->2
+						temp->body.links.prev = freeBlock;
+					}
+				} else if (GET_SIZE(freeBlock) > M && GET_SIZE(freeBlock) <= (M << 1)) {
+						// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+						//preserve 3
+						temp = sf_free_list_heads[i].body.links.next;
+						//set 1->2
+						sf_free_list_heads[i].body.links.next = freeBlock;
+						//set 2->3
+						freeBlock->body.links.next = temp;
+						//set 2->1
+						freeBlock->body.links.prev = &sf_free_list_heads[i];
+						//set 3->2
+						temp->body.links.prev = freeBlock;
+				} else if(i == NUM_FREE_LISTS - 1) {
+					// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+					if(GET_SIZE(freeBlock) > (M << 1)) {
+						// 1->3, 1 is dummy, 3 is next block, 2 is inserting block
+						//preserve 3
+						temp = sf_free_list_heads[i].body.links.next;
+						//set 1->2
+						sf_free_list_heads[i].body.links.next = freeBlock;
+						//set 2->3
+						freeBlock->body.links.next = temp;
+						//set 2->1
+						freeBlock->body.links.prev = &sf_free_list_heads[i];
+						//set 3->2
+						temp->body.links.prev = freeBlock;
+					}
+				}
+				if (i != 0) {
+					M = M << 1;
+				}
+		}
+	}
+	debug("Free");
+	sf_show_heap();
 }
 
 void *sf_realloc(void *pp, size_t rsize)
@@ -363,3 +672,4 @@ void *sf_memalign(size_t size, size_t align)
 	// TO BE IMPLEMENTED
 	abort();
 }
+
