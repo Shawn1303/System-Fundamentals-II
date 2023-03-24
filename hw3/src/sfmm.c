@@ -866,6 +866,7 @@ void *sf_memalign(size_t size, size_t align)
 			return NULL;
 		}
 	}
+	//align not power of 2 or less than 8
 	sf_errno = EINVAL;
 	return NULL;
 }
