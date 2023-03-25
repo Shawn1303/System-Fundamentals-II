@@ -433,11 +433,13 @@ void *sf_malloc(size_t size)
 			// not splitting
 			// change header of allocated block
 			toBeAllocated->header = toBeAllocatedBlockSize | GET_PREALLOC(toBeAllocated) | THIS_BLOCK_ALLOCATED;
+			//set next block PrevAllocated
+			PUT((void *)GET_FOOTER_FROM_HEADER(toBeAllocated) + 8, GET_SIZE((void *)GET_FOOTER_FROM_HEADER(toBeAllocated) + 8) | GET_ALLOC((void *)GET_FOOTER_FROM_HEADER(toBeAllocated) + 8) | PREV_BLOCK_ALLOCATED | GET_INQUICKLIST((void *)GET_FOOTER_FROM_HEADER(toBeAllocated) + 8));
 		}
 
 		// debug("%zu", GET_SIZE(toBeAllocated));
 		// debug("malloc");
-		sf_show_heap();
+		// sf_show_heap();
 		return toBeAllocated->body.payload;
 	}
 
@@ -729,7 +731,7 @@ void sf_free(void *pp)
 		}
 	}
 	// debug("Free");
-	sf_show_heap();
+	// sf_show_heap();
 }
 
 void *sf_realloc(void *pp, size_t rsize)
@@ -770,7 +772,7 @@ void *sf_realloc(void *pp, size_t rsize)
 			{
 				memcpy(largerBlock, pp, rsize);
 				sf_free(pp);
-				sf_show_heap();
+				// sf_show_heap();
 				return largerBlock;
 			}
 			else
@@ -901,12 +903,12 @@ void *sf_realloc(void *pp, size_t rsize)
 						M = M << 1;
 					}
 				}
-				sf_show_heap();
+				// sf_show_heap();
 				return pp;
 			}
 			else
 			{
-				sf_show_heap();
+				// sf_show_heap();
 				// don't split
 				//  memcpy(pp, pp, blockSizeNeed);
 				//  PUT(GET_HEADER_FROM_PAYLOAD(pp), blockSizeNeed | GET_ALLOC(GET_HEADER_FROM_PAYLOAD(pp)) | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(pp)));
@@ -965,11 +967,12 @@ void *sf_memalign(size_t size, size_t align)
 
 				largerReqBlock = alignedBlock;
 			}
+			// debug("sizeNeeded: %zu", alignBlockSizeNeeded);
 			// set back half to be free
 			if ((GET_SIZE(GET_HEADER_FROM_PAYLOAD(largerReqBlock)) - alignBlockSizeNeeded) >= 32)
 			{
-				debug("current block size: %zu", GET_SIZE(GET_HEADER_FROM_PAYLOAD(largerReqBlock)));
-				debug("sizeNeeded: %zu", alignBlockSizeNeeded);
+				// debug("current block size: %zu", GET_SIZE(GET_HEADER_FROM_PAYLOAD(largerReqBlock)));
+				// debug("sizeNeeded: %zu", alignBlockSizeNeeded);
 				size_t totalSize = GET_SIZE(GET_HEADER_FROM_PAYLOAD(largerReqBlock));
 				// update header of aligned block to be alignBlockSizeNeeded
 				PUT(GET_HEADER_FROM_PAYLOAD(largerReqBlock), alignBlockSizeNeeded | GET_PREALLOC(GET_HEADER_FROM_PAYLOAD(largerReqBlock)) | THIS_BLOCK_ALLOCATED);
@@ -985,7 +988,7 @@ void *sf_memalign(size_t size, size_t align)
 				// free right free
 				sf_free(largerReqBlock + alignBlockSizeNeeded);
 			}
-			sf_show_heap();
+			// sf_show_heap();
 			// aligned
 			return largerReqBlock;
 		}
@@ -996,7 +999,7 @@ void *sf_memalign(size_t size, size_t align)
 			return NULL;
 		}
 	}
-	sf_show_heap();
+	// sf_show_heap();
 	// align not power of 2 or less than 8
 	sf_errno = EINVAL;
 	return NULL;

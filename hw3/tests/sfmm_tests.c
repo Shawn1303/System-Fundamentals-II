@@ -244,3 +244,111 @@ Test(sfmm_basecode_suite, realloc_smaller_block_free_block, .timeout = TEST_TIME
 
 //Test(sfmm_student_suite, student_test_1, .timeout = TEST_TIMEOUT) {
 //}
+Test(sfmm_student_suite, student_test_memalign_align32, .timeout = TEST_TIMEOUT) {
+	// 	size_t sz_x = sizeof(int) * 20;
+	// void *x = sf_memalign(sz_x, 16);
+	//size is 80
+			size_t sz_x = sizeof(int) * 20;
+	void *x = sf_memalign(sz_x, 8);
+
+	cr_assert_not_null(x, "x is NULL!");
+	sf_block *bp = (sf_block *)((char *)x - sizeof(sf_header));
+	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
+	cr_assert((bp->header & ~0x7) == 88, "Block size not what was expected!");
+
+	assert_quick_list_block_count(0, 1);
+	assert_quick_list_block_count(40, 1);
+	assert_free_block_count(0, 1);
+	assert_free_block_count(3928, 1);
+	assert_free_list_size(7, 1);
+}
+
+Test(sfmm_student_suite, student_test_memalign_align16, .timeout = TEST_TIMEOUT) {
+	// 	size_t sz_x = sizeof(int) * 20;
+	// void *x = sf_memalign(sz_x, 16);
+	//size is 80
+			size_t sz_x = sizeof(double) * 20;
+	void *x = sf_memalign(sz_x, 16);
+
+	cr_assert_not_null(x, "x is NULL!");
+	sf_block *bp = (sf_block *)((char *)x - sizeof(sf_header));
+	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
+	cr_assert((bp->header & ~0x7) == 176, "Block size not what was expected!");
+
+	assert_quick_list_block_count(0, 1);
+	assert_quick_list_block_count(40, 1);
+	assert_free_block_count(0, 1);
+	assert_free_block_count(3840, 1);
+	assert_free_list_size(7, 1);
+}
+
+Test(sfmm_student_suite, student_test_memalign_twoFreeBlockFrontAndBack, .timeout = TEST_TIMEOUT) {
+			size_t sz_x = sizeof(double)*15;
+	void *x = sf_memalign(sz_x, 1024);
+
+	cr_assert_not_null(x, "x is NULL!");
+	sf_block *bp = (sf_block *)((char *)x - sizeof(sf_header));
+	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
+	cr_assert((bp->header & ~0x7) == sz_x + 8, "Block size not what was expected!");
+
+	assert_quick_list_block_count(0, 0);
+	assert_free_block_count(0, 2);
+	assert_free_block_count(3408, 1);
+	assert_free_block_count(520, 1);
+	assert_free_list_size(7, 1);
+	assert_free_list_size(5, 1);
+}
+
+Test(sfmm_student_suite, student_test_mix, .timeout = TEST_TIMEOUT) {
+			size_t sz_x = sizeof(char)*50;
+	void *x = sf_malloc(sz_x);
+	cr_assert_not_null(x, "x is NULL!");
+	sf_block *bp = (sf_block *)((char *)x - sizeof(sf_header));
+	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
+	cr_assert((bp->header & ~0x7) == 64, "Block size not what was expected!");
+
+	void *y = sf_realloc(x, 0);
+	cr_assert_not_null(!y, "y is not NULL!");
+
+	void *z = sf_malloc(3992 - 8);
+	cr_assert_not_null(z, "z is not NULL!");
+	sf_block *ep = (sf_block *)(sf_mem_end() - 8);
+	cr_assert(ep->header & PREV_BLOCK_ALLOCATED, "Preallocated bit is not set!");
+	assert_free_block_count(0, 0);
+	assert_quick_list_block_count(0, 1);
+	assert_quick_list_block_count(64, 1);
+
+	sf_malloc(1);
+	assert_free_block_count(0, 1);
+	assert_free_block_count(4064, 1);
+	assert_quick_list_block_count(0, 1);
+	assert_quick_list_block_count(64, 1);
+	assert_free_list_size(7, 1);
+
+}
+
+Test(sfmm_student_suite, student_test_checkFlush, .timeout = TEST_TIMEOUT) {
+			// size_t sz_x = sizeof(double)*50;
+	void *a = sf_malloc(1);
+	void *b = sf_malloc(1);
+	void *c = sf_malloc(1);
+	void *d = sf_malloc(1);
+	void *e = sf_malloc(1);
+	void *f = sf_malloc(1);
+	
+	sf_free(a);
+	sf_free(b);
+	sf_free(c);
+	sf_free(d);
+	sf_free(e);
+	assert_quick_list_block_count(0, 5);
+	assert_quick_list_block_count(32, 5);
+
+	sf_free(f);
+
+	assert_quick_list_block_count(0, 1);
+	assert_quick_list_block_count(32, 1);
+	assert_free_block_count(0, 2);
+	assert_free_list_size(3, 1);
+
+}
