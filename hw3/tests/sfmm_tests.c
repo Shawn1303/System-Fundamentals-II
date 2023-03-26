@@ -251,15 +251,14 @@ Test(sfmm_student_suite, student_test_memalign_align32, .timeout = TEST_TIMEOUT)
 			size_t sz_x = sizeof(int) * 20;
 	void *x = sf_memalign(sz_x, 8);
 
+
 	cr_assert_not_null(x, "x is NULL!");
 	sf_block *bp = (sf_block *)((char *)x - sizeof(sf_header));
 	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
 	cr_assert((bp->header & ~0x7) == 88, "Block size not what was expected!");
 
-	assert_quick_list_block_count(0, 1);
-	assert_quick_list_block_count(40, 1);
 	assert_free_block_count(0, 1);
-	assert_free_block_count(3928, 1);
+	assert_free_block_count(3968, 1);
 	assert_free_list_size(7, 1);
 }
 
@@ -273,12 +272,11 @@ Test(sfmm_student_suite, student_test_memalign_align16, .timeout = TEST_TIMEOUT)
 	cr_assert_not_null(x, "x is NULL!");
 	sf_block *bp = (sf_block *)((char *)x - sizeof(sf_header));
 	cr_assert(bp->header & THIS_BLOCK_ALLOCATED, "Allocated bit is not set!");
-	cr_assert((bp->header & ~0x7) == 176, "Block size not what was expected!");
+	cr_assert((bp->header & ~0x7) == 184, "Block size not what was expected!");
 
-	assert_quick_list_block_count(0, 1);
-	assert_quick_list_block_count(40, 1);
-	assert_free_block_count(0, 1);
-	assert_free_block_count(3840, 1);
+	assert_free_block_count(0, 2);
+	assert_free_block_count(3832, 1);
+	assert_free_block_count(40, 1);
 	assert_free_list_size(7, 1);
 }
 
