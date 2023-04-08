@@ -1,7 +1,7 @@
 bin/
 build/
-hw1/rsrc/
-hw1/tests/
-hw1/sample/
-.vscode/
-hw3/temp
+test_output/
+*~
+*.out
+*.bak
+*.o
