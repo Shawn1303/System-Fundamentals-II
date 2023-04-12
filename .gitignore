@@ -5,3 +5,8 @@ test_output/
 *.out
 *.bak
 *.o
+.vscode/
+hw1/rsrc
+hw1/sample
+hw1/tests
+hw3/temp

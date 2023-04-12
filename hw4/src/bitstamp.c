@@ -5,6 +5,15 @@
 #include "bitstamp.h"
 #include "debug.h"
 
+typedef struct watcher {
+	// int index;
+	int wType;
+	int pid;
+	int fd1;
+	int fd2;
+	char** args;
+} WATCHER;
+
 WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
     // TO BE IMPLEMENTED
     abort();

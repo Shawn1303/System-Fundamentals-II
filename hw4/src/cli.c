@@ -5,13 +5,26 @@
 #include "cli.h"
 #include "debug.h"
 
+#include <unistd.h>
+
+typedef struct watcher {
+	// int index;
+	int wType;
+	int pid;
+	int fd1;
+	int fd2;
+	char** args;
+} WATCHER;
+
 WATCHER *cli_watcher_start(WATCHER_TYPE *type, char *args[]) {
-    // TO BE IMPLEMENTED
-    abort();
+	WATCHER *wp = (WATCHER *)malloc(sizeof(WATCHER));
+	*wp = (WATCHER){.wType = CLI_WATCHER_TYPE, .pid = -1, .fd1 = 0, .fd2 = 1, .args = args};
+	return wp;
 }
 
 int cli_watcher_stop(WATCHER *wp) {
     // TO BE IMPLEMENTED
+	//Free WATCHER
     abort();
 }
 
