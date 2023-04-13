@@ -4,19 +4,52 @@
 #include "ticker.h"
 #include "bitstamp.h"
 #include "debug.h"
-
-typedef struct watcher {
-	// int index;
-	int wType;
-	int pid;
-	int fd1;
-	int fd2;
-	char** args;
-} WATCHER;
+#include "watchers.h"
+#include "unistd.h"
 
 WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
-    // TO BE IMPLEMENTED
-    abort();
+    WATCHER *wp = (WATCHER *)malloc(sizeof(WATCHER));
+
+	// int fd[2], pid;
+	// //create pipe
+	// if(pipe(fd) == -1) {
+	// 	perror("pipe failed");
+	// 	return NULL;
+	// }
+
+	// //fork
+	// pid = fork();
+	// if(pid == -1) {
+	// 	perror("fork failed");
+	// 	return NULL;
+	// }
+
+	// //child process
+	// if(!pid) {
+	// 	// redirect standard input to the write end of the pipe
+    //     if (dup2(fd[0], STDIN_FILENO) == -1) {
+    //         perror("dup2");
+    //         return NULL;
+    //     }
+
+    //     // redirect standard output to the read end of the pipe
+    //     if (dup2(fd[1], STDOUT_FILENO) == -1) {
+    //         perror("dup2");
+    //         return NULL;
+    //     }
+
+	// 	// Close unused file descriptors
+    //     close(fd[0]);
+    //     close(fd[1]);
+
+	// 	//execute uwsc
+	// 	execvp(type->argv[0], type->argv[1]);
+	// } else {
+
+	// }
+
+	// *wp = (WATCHER){.wType = type, .pid = , .fd1 = , .fd2 = , .args = args};
+	return wp;
 }
 
 int bitstamp_watcher_stop(WATCHER *wp) {
