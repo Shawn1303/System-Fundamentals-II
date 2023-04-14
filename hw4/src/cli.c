@@ -17,7 +17,7 @@ WATCHER *cli_watcher_start(WATCHER_TYPE *type, char *args[]) {
 		perror("malloc failed");
 		return NULL;
 	}
-	*wp = (WATCHER){.wType = type, .pid = -1, .fd1 = 0, .fd2 = 1, .args = args};
+	*wp = (WATCHER){.wType = type, .pid = -1, .fd1 = 0, .fd2 = 1, .args = args, .terminating = 0};
 	return wp;
 }
 
@@ -25,8 +25,10 @@ WATCHER *cli_watcher_start(WATCHER_TYPE *type, char *args[]) {
 int cli_watcher_stop(WATCHER *wp) {
 	// if(!(strcmp(wp->wType->name, "CLI"))) {
 		// debug("watcher_stop: %s", wp->wType.name);
+	WATCHER **watcher_table = wp->watcher_table;
+	wp->watcher_table = NULL;
 	free(wp);
-	free(wp->watcher_table);
+	free(watcher_table);
 	return 0;
 	// } 
 	// return -1;
@@ -62,8 +64,11 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
 	//last argv is null
 	commandArgs[argvIndex] = NULL;
 	// debug("command: %d", command[strlen(command)]);
+	// if(wp->watcher_table[1]) {
+	// 	debug("args: %s", wp->watcher_table[1]->args[0]);
+	// }
 
-	// //handle command
+	//handle command
 	return handleCommand(commandArgs, wp);
 }
 

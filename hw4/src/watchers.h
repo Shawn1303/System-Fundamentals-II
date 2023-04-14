@@ -9,9 +9,11 @@ typedef struct watcher{
 	int pid;//process id
 	int fd1;//file descriptor 1
 	int fd2;//file descriptor 2
-	char **args;//additional arguments
-	int maxWatcherIndex;
+	char **args;//additional arguments, allocated need free
+	// int maxWatcherIndex;
 	WATCHER **watcher_table;
+	int watcher_table_size;
+	int terminating;
 } WATCHER;
 
 #endif /* WATCHER_H */

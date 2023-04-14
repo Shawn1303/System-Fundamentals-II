@@ -8,11 +8,31 @@
 #include "debug.h"
 #include "watchers.h"
 #include <sys/wait.h>
+// #include "flags.h"
 
 #include "ticker.h"
 
+//quit flag
+int quit;
+//error flag
+int err;
+//keeps track of the max number of watchers I need to check
+// int maxWatcherIndex;
+//watcher table pointer
+WATCHER **watcher_table;
+//CLI
+WATCHER *CLI;
+
+//track of number of children allocated
+int childrenAllocated = 0;
+//track of number of children freed
+int childrenFreed = 0;
+
+
 void sigIntHandler(int sig) {
 	debug("sigInt terminated\n");
+	//figure out what to close and shit
+	//don't exit
 	exit(0);
 }
 
@@ -20,9 +40,54 @@ void sigChildHandler(int sig) {
 	// debug("sigChild terminated\n");
 	int status, pid;
     while ((pid = waitpid(-1, &status, WNOHANG)) > 0) {
-        printf("Child process %d terminated\n", pid);
+		// debug("hi");
+		// sigChildTermFlag = 1;
+        // debug("Child process %d terminated\n", pid);
+
+		//find the watcher that terminated
+		int terminated = 1;
+		// debug("CLI: %p", CLI);
+		while(terminated < CLI->watcher_table_size) {
+			// debug("wPid: %d" , CLI->watcher_table[terminated]->pid);
+			// debug("pid: %d", pid);
+			if(CLI->watcher_table[terminated]) {
+				if(CLI->watcher_table[terminated]->pid == pid) {
+					// debug("freeing");
+					int argsIndex = 0;
+					while(CLI->watcher_table[terminated]->args[argsIndex]) {
+						// debug("args: %s", CLI->watcher_table[terminated]->args[argsIndex]);
+						free(CLI->watcher_table[terminated]->args[argsIndex]);
+						argsIndex++;
+					}
+					free(CLI->watcher_table[terminated]->args);
+					free(CLI->watcher_table[terminated]);
+					CLI->watcher_table[terminated] = NULL;
+					// CLI->watcher_table_size--;
+					if(quit) {
+						childrenFreed += 1;
+						// debug("childrenF %d", childrenFreed);
+					}
+					break;
+				}
+			}
+			terminated++;
+		}
     }
-	exit(0);
+	// debug("hi");
+	// debug("watcher2: %d", CLI->watcher_table[2]->pid);
+
+	if(pid == -1 && errno != ECHILD) {
+		perror("waitpid failed");
+		err = 1;
+		// exit(1);
+	}
+	// debug("quit, %d", quit);
+	// if(quit) {
+	// 	childrenFreed += 1;
+	// debug("childrenF %d", childrenFreed);
+	// }
+	//don't exit
+	// exit(0);
 }
 
 //becomes 1 if userinput is avaliable
@@ -39,58 +104,6 @@ void sigIOHandler(int sig, siginfo_t *siginfo, void *context) {
 		userInput = 1;
 	}
 }
-
-//quit flag
-int quit;
-//error flag
-int err;
-//keeps track of the max number of watchers I need to check
-// int maxWatcherIndex;
-//watcher table pointer
-WATCHER **watcher_table;
-//CLI
-WATCHER *CLI;
-
-//handles commands
-// void handleCommand(char **command) {
-// 	//check first arg
-// 	char *firstArg = command[0];
-// 	if(!(strcmp(firstArg, "quit"))) {
-// 		//set quit flag
-// 		//dont exit right away to free things
-// 		quit = 1;
-// 	} else if(!(strcmp(firstArg, "watchers"))) {
-// 		//print out all the watchers
-// 		for(int i = 0; i <= maxWatcherIndex; i++) {
-// 			if(watcher_table[i]) {
-// 				//get expected size of string
-// 				int watcherInfoSize = snprintf(NULL, 0, "%d\t%s(%d,%d,%d)", i, watcher_table[i]->wType->name, watcher_table[i]->pid, watcher_table[i]->fd1, watcher_table[i]->fd2);
-// 				// debug("watcherInfoSize: %d", watcherInfoSize);
-// 				char watcherInfo[watcherInfoSize + 1];
-// 				//get the string
-// 				sprintf(watcherInfo, "%d\t%s(%d,%d,%d)", i, watcher_table[i]->wType->name, watcher_table[i]->pid, watcher_table[i]->fd1, watcher_table[i]->fd2);
-// 				watcherInfo[watcherInfoSize] = '\0';
-// 				// debug("watcherInfo: %s", watcherInfo);
-// 				//write to stdout
-// 				write(STDOUT_FILENO, watcherInfo, watcherInfoSize);
-// 				//write the arguments of the watcher type
-// 				while(watcher_table[i]->wType->argv) {
-// 					//for bitstamp
-// 					//write the arguments
-// 				}
-// 				//write the additional arguments
-// 				while(watcher_table[i]->args) {
-// 					//if theres additional args, write them
-// 				}
-// 				//write a newline
-// 				write(STDOUT_FILENO, "\n", 1);
-// 			}
-// 		}
-// 	} else {
-// 		//invalid command
-// 		write(STDOUT_FILENO, "???\n", 4);
-// 	}
-// }
 
 // void readFromInput(sigset_t *mask) {
 int readFromInput() {
@@ -118,7 +131,9 @@ int readFromInput() {
 		if ((fwrite(input, sizeof(char), n, memstream)) < 0) {
 			perror("fwrite failed");
 			// exit(1);
-			return -1;
+			// return -1;
+			err = 1;
+			break;
 		}
 	}
 	// debug("n after read: %d", n);
@@ -137,7 +152,8 @@ int readFromInput() {
 			// debug("%d", errno);
 			perror("read failed");
 			// exit(1);
-			return -1;
+			// return -1;
+			err = 1;
 		}
 	}
 
@@ -148,6 +164,7 @@ int readFromInput() {
 	// debug("command: %s", command);
 	//dynamically allocates memory for reading command lines
 	while(getline(&command, &command_size, memstream) != -1) {
+		// debug("hi");
 		//set newline to null pointer
 		// debug("command arg: %d", command[strlen(command)]);
 		command[strlen(command) - 1] = '\0';
@@ -177,8 +194,11 @@ int readFromInput() {
 		// handleCommand(commandArgs);
 
 		//recv return 1 if quit
-		if(CLI->wType->recv(CLI, command)) {
+		int recv = CLI->wType->recv(CLI, command);
+		if( recv == 1) {
 			quit = 1;
+		} else if(recv == -1) {
+			err = 1;
 		}
 
 
@@ -188,9 +208,13 @@ int readFromInput() {
 		// write(STDOUT_FILENO, "ticker> ", 8);
 		if(CLI->wType->send(CLI, "ticker> ") < 0) {
 			perror("send failed");
-			debug("hi");
+			// debug("hi");
 			// exit(1);
-			return -1;
+			// free(command);
+			// command = NULL;
+			// command_size = 0;
+			// return -1;
+			err = 1;
 		}
 
 		//free array after use
@@ -199,10 +223,14 @@ int readFromInput() {
 		command_size = 0;
 
 		//if command is quit, break
-		if(quit) {
+		if(quit || err) {
 			break;
 		}
 	}
+	//free array after use
+	free(command);
+	command = NULL;
+	command_size = 0;
 
 	//apparently returns 0 in nonblocking mode when EOF for file descriptor or something and I need to quit
 	if(n == 0) {
@@ -210,20 +238,23 @@ int readFromInput() {
 	}
 
 	//close memstream and free memory
-	if(quit && memstream) {
+	if((quit || err) && memstream) {
 		// debug("quit: %d", quit);
 		// debug("n: %d", n);
 		// debug("memstream: %p", memstream);
 		if(fclose(memstream) == EOF) {
 			perror("fclose memstream failed");
 			// exit(1);
-			return -1;
+			// return -1;
+			err = 1;
 		}
 		free(buf);
 		buf = NULL;
 		memstream = NULL;
 		buf_size = 0;
 	}
+
+	if(err) return -1;
 
 	return 0;
 }
@@ -289,6 +320,7 @@ int ticker(void) {
 
 
 	//start CLI and table
+	//watcher_types[CLI_WATCHER_TYPE].argv
 	if(!(CLI = watcher_types[CLI_WATCHER_TYPE].start(&watcher_types[CLI_WATCHER_TYPE], watcher_types[CLI_WATCHER_TYPE].argv))) {
 		perror("CLI start failed");
 		return 1;
@@ -300,11 +332,17 @@ int ticker(void) {
 		return 1;
 	}
 	CLI->watcher_table = watcher_table;
+	CLI->watcher_table_size = watcher_table_size;
+	// debug("%p", &watcher_table_size);
+	// debug("%p", &CLI->watcher_table_size);
 	watcher_table[0] = CLI;
 	//used to keep track of max index in watcher_table
 	// maxWatcherIndex = 0;
-	CLI->maxWatcherIndex = 0;
+	// CLI->maxWatcherIndex = 0;
 	watcher_table[1] = NULL;
+	for(int i = 2; i < watcher_table_size; i++) {
+		watcher_table[i] = NULL;
+	}
 
 	//used for sigsuspend
 	sigset_t mask;
@@ -329,7 +367,8 @@ int ticker(void) {
 		err = 1;
 	}
 
-	while(!quit) {
+	while(!quit && !err) {
+		// debug("hi");
 		if(!userInput) {
 			sigsuspend(&mask);
 		}
@@ -339,6 +378,12 @@ int ticker(void) {
 				err = 1;
 			}
 		}
+		// if(watcher_table[1]) {
+		// 	debug("args: %s", watcher_table[1]->args[0]);
+		// }
+		// debug("%s", watcher_types[0].name);
+		// debug("%s", watcher_types[1].name);
+		// debug("%s", watcher_types[2].name);
 
 		//execute second
 		// write(STDOUT_FILENO, "ticker> ", 8);
@@ -362,7 +407,27 @@ int ticker(void) {
 	}
 
 	//quit happens
-	//call CLI.stop?
+	int closeIndex = 1;
+	// debug("%p", &watcher_table_size);
+	// debug("%p", &CLI->watcher_table_size);
+	//malloc the size ---------------------------------------------------------------------------------
+	while(closeIndex < CLI->watcher_table_size) {
+		if(watcher_table[closeIndex]) {
+			// debug("hi");
+			if(watcher_table[closeIndex]->wType->stop(watcher_table[closeIndex]) < 0) {
+				perror("watcher stop failed");
+				return 1;
+			} else {
+				childrenAllocated++;
+			}
+		}
+		closeIndex++;
+	}
+	// debug("childrenAllocated: %d", childrenAllocated);
+	// debug("childrenFreed: %d", childrenFreed);
+	while(childrenFreed != childrenAllocated);
+	// debug("hi");
+	//stop CLI
 	if(CLI->wType->stop(CLI) < 0) {
 		perror("CLI stop failed");
 		return 1;
