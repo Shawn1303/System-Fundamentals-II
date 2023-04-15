@@ -91,7 +91,7 @@ void sigChildHandler(int sig) {
 }
 
 //becomes 1 if userinput is avaliable
-volatile sig_atomic_t userInput = 0;
+volatile sig_atomic_t sigIO = 0;
 
 void sigIOHandler(int sig, siginfo_t *siginfo, void *context) {
 	//execute first
@@ -99,10 +99,14 @@ void sigIOHandler(int sig, siginfo_t *siginfo, void *context) {
     int fd = siginfo->si_fd;
 
 	//if user input is avaliable on stdin
-	if(fd == STDIN_FILENO) {
+	// if(fd == STDIN_FILENO) {
 		//user input avaliable
-		userInput = 1;
-	}
+		// debug("fd: %d", fd);
+		// userInput = 1;
+	// } else {
+		debug("fd: %d", fd);
+	// }
+	sigIO = 1;
 }
 
 // void readFromInput(sigset_t *mask) {
@@ -146,7 +150,7 @@ int readFromInput() {
 	//if error
 	if(n < 0) { 
 		if(errno == EWOULDBLOCK) {
-			userInput = 0;
+			// userInput = 0;
 			// sigsuspend(&mask);
 		} else {
 			// debug("%d", errno);
@@ -262,26 +266,44 @@ int readFromInput() {
 int ticker(void) {
 	struct sigaction action1, action2, action3;
 	//initialize sigactions
-	memset(&action1, 0, sizeof(action1));
+	if(memset(&action1, 0, sizeof(action1)) == NULL) {
+		perror("memset failed");
+		return 1;
+	}
 	action1.sa_handler = sigIntHandler;
-	sigemptyset(&action1.sa_mask);
+	if(sigemptyset(&action1.sa_mask)) {
+		perror("sigemptyset");
+		return 1;
+	}
 	if(sigaction(SIGINT, &action1, NULL) < 0) {
 		perror("sigaction SIGINT");
 		return 1;
 	}
 
-	memset(&action2, 0, sizeof(action2));
+	if(memset(&action2, 0, sizeof(action2)) == NULL) {
+		perror("memset failed");
+		return 1;
+	}
 	action2.sa_handler = sigChildHandler;
-	sigemptyset(&action2.sa_mask);
+	if(sigemptyset(&action2.sa_mask)) {
+		perror("sigemptyset");
+		return 1;
+	}
 	if(sigaction(SIGCHLD, &action2, NULL) < 0) {
 		perror("sigaction SIGCHLD");
 		return 1;
 	}
 
-	memset(&action3, 0, sizeof(action3));
+	if(memset(&action3, 0, sizeof(action3)) == NULL) {
+		perror("memset failed");
+		return 1;
+	}
 	action3.sa_sigaction = sigIOHandler;
 	action3.sa_flags = SA_SIGINFO;
-	sigemptyset(&action3.sa_mask);
+	if(sigemptyset(&action3.sa_mask)) {
+		perror("sigemptyset");
+		return 1;
+	}
 	if(sigaction(SIGIO, &action3, NULL) < 0) {
 		perror("sigaction SIGIO");
 		return 1;
@@ -317,6 +339,23 @@ int ticker(void) {
 		perror("fcntl F_SETSIG");
 		return 1;
 	}
+
+
+
+	// if (fcntl(STDOUT_FILENO, F_SETFL, O_ASYNC | O_NONBLOCK) == -1) {
+    //     perror("Error: cannot set non-blocking mode for stdout");
+    //     return 1;
+    // }
+    // if (fcntl(STDOUT_FILENO, F_SETOWN, getpid()) == -1) {
+    //     perror("Error: cannot set process owner for stdout");
+    //     return 1;
+    // }
+    // if (fcntl(STDOUT_FILENO, F_SETSIG, SIGIO) == -1) {
+    //     perror("Error: cannot set signal for stdout");
+    //     return 1;
+    // }
+
+
 
 
 	//start CLI and table
@@ -369,14 +408,17 @@ int ticker(void) {
 
 	while(!quit && !err) {
 		// debug("hi");
-		if(!userInput) {
+		if(!sigIO) {
 			sigsuspend(&mask);
 		}
-		if(userInput) {
+		// debug("userInput: %d", userInput);
+		if(sigIO) {
+			sigIO = 0;
 			if(readFromInput() == -1) {
 				quit = 1;
 				err = 1;
 			}
+
 		}
 		// if(watcher_table[1]) {
 		// 	debug("args: %s", watcher_table[1]->args[0]);
