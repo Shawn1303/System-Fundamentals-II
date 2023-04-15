@@ -8,6 +8,7 @@
 #include "unistd.h"
 #include <sys/types.h>
 #include <signal.h>
+#include <fcntl.h>
 // #include "flags.h"
 
 WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
@@ -85,6 +86,29 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
 		//parent don't use pipe2 to read, only write
 		close(fd2[0]);
 		//parent process
+
+		if(fcntl(fd1[0], F_SETFL, O_ASYNC | O_NONBLOCK) < 0) {
+			perror("fcntl F_SETFL");
+			return NULL;
+		}
+
+	// The fcntl() system call has to be used on that file descriptor with
+	// command F_SETOWN to identity the process to which I/O notifications for
+	// that file descriptor should be sent;
+		if(fcntl(fd1[0], F_SETOWN, getpid()) < 0) {
+			perror("fcntl F_SETOWN");
+			return NULL;
+		}
+
+	// The fcntl() system call has to be used
+	// on that file descriptor with command F_SETSIG to designate
+	// SIGIO as the signal to be sent as the asynchronous I/O notification
+		if(fcntl(fd1[0], F_SETSIG, SIGIO) < 0) {
+			perror("fcntl F_SETSIG");
+			return NULL;
+		}
+
+
 		int argsCount = 0;
 		while(args[argsCount] != NULL) {
 			argsCount++;
@@ -111,10 +135,10 @@ WATCHER *bitstamp_watcher_start(WATCHER_TYPE *type, char *args[]) {
 
 		*wp = (WATCHER){.wType = type, .pid = pid, .fd1 = fd1[0], .fd2 = fd2[1], .args = mallocArgs, .terminating = 0};
 		// debug("wp->args[0]: %s", wp->args[0]);
-		int jsonComSize = snprintf(NULL, 0, "{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"%s\" } }\n", args[0]);
-		char jsonCom[jsonComSize + 1];
-		sprintf(jsonCom, "{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"%s\" } }\n", args[0]);
-		jsonCom[jsonComSize] = '\0';
+		// int jsonComSize = snprintf(NULL, 0, "{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"%s\" } }\n", args[0]);
+		// char jsonCom[jsonComSize + 1];
+		// sprintf(jsonCom, "{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"%s\" } }\n", args[0]);
+		// jsonCom[jsonComSize] = '\0';
 		// debug("jsonCom[jsonComSize]: %c", jsonCom[jsonComSize - 1]);
 		// debug("jsonCom: %s", jsonCom);
 		// debug("jsonSize: %d", jsonComSize);
@@ -185,12 +209,32 @@ int bitstamp_watcher_stop(WATCHER *wp) {
 }
 
 int bitstamp_watcher_send(WATCHER *wp, void *arg) {
-	return write(wp->fd2, arg, strlen(arg));
+	return write(wp->fd2, arg, strlen(arg) + 1);
 }
 
 int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
-    // TO BE IMPLEMENTED
-    abort();
+	if(!strcmp(txt, "Websocket connected, you can send text messages of maximum 256 characters.")) {
+		// debug("hi");
+		// debug("txt: %s", txt);
+		int jsonComSize; 
+		// debug("wp->args[0]: %s", wp->args[0]);
+		if((jsonComSize = snprintf(NULL, 0, "{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"%s\" } }\n", wp->args[0])) < 0) {
+			perror("snprintf failed");
+			return -1;
+		}
+		char jsonCom[jsonComSize + 1];
+		if((sprintf(jsonCom, "{ \"event\": \"bts:subscribe\", \"data\": { \"channel\": \"%s\" } }\n", wp->args[0])) < 0) {
+			perror("sprintf failed");
+			return -1;
+		}
+		jsonCom[jsonComSize] = '\0';
+		// debug("jsonCom: %s", jsonCom);
+		wp->wType->send(wp, jsonCom);
+	} else {
+		debug("%s", txt);
+
+	}
+	return 0;
 }
 
 int bitstamp_watcher_trace(WATCHER *wp, int enable) {

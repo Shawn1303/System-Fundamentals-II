@@ -91,22 +91,24 @@ void sigChildHandler(int sig) {
 }
 
 //becomes 1 if userinput is avaliable
-volatile sig_atomic_t sigIO = 0;
+volatile sig_atomic_t userInput = 0;
+volatile sig_atomic_t processInput = 0;
 
 void sigIOHandler(int sig, siginfo_t *siginfo, void *context) {
 	//execute first
 	//gets stdin file descriptor
     int fd = siginfo->si_fd;
 
-	//if user input is avaliable on stdin
-	// if(fd == STDIN_FILENO) {
-		//user input avaliable
-		// debug("fd: %d", fd);
-		// userInput = 1;
-	// } else {
+	// if user input is avaliable on stdin
+	if(fd == STDIN_FILENO) {
+		// user input avaliable
 		debug("fd: %d", fd);
-	// }
-	sigIO = 1;
+		userInput = 1;
+	} else {
+		debug("fd: %d", fd);
+		processInput = fd;
+	}
+	// sigIO = 1;
 }
 
 // void readFromInput(sigset_t *mask) {
@@ -150,7 +152,7 @@ int readFromInput() {
 	//if error
 	if(n < 0) { 
 		if(errno == EWOULDBLOCK) {
-			// userInput = 0;
+			userInput = 0;
 			// sigsuspend(&mask);
 		} else {
 			// debug("%d", errno);
@@ -259,6 +261,105 @@ int readFromInput() {
 	}
 
 	if(err) return -1;
+
+	return 0;
+}
+
+int readFromProcess(int fd) {
+	static char *buf = NULL;
+	static size_t buf_size = 0;
+	static FILE *memstream = NULL;
+	WATCHER *sender = NULL;
+
+	for(int i = 0; i < CLI->watcher_table_size; i++) {
+		if(CLI->watcher_table[i]->fd1 == fd) {
+			sender = CLI->watcher_table[i];
+			debug("sender: %d", sender->fd1);
+			debug("fd: %d", fd);
+			break;
+		}
+	}
+
+	//open memstream, called once
+	if(!(memstream)) {
+		if(!(memstream = open_memstream(&buf, &buf_size))) {
+			perror("open_memstream failed");
+			// exit(1);
+			return -1;
+		}
+	}
+
+	//read from stdin until no more input
+	int m;
+	char received[100];
+	while((m = read(fd, received, sizeof(received))) > 0) {
+		// debug("n: %d", n);
+		// debug("input: %s", input);
+		//write to memstream
+		if ((fwrite(received, sizeof(char), m, memstream)) < 0) {
+			perror("fwrite failed");
+			// exit(1);
+			// return -1;
+			err = 1;
+			break;
+		}
+		// debug("input: %s", msg);
+	}
+
+	if(m < 0) { 
+		if(errno == EWOULDBLOCK) {
+			processInput = 0;
+			// sigsuspend(&mask);
+		} else {
+			// debug("%d", errno);
+			perror("read failed");
+			// exit(1);
+			// return -1;
+			err = 1;
+		}
+	}
+
+	//parse msg
+	char *msg = NULL;
+	size_t msg_size = 0;
+	// debug("word: %s", fgets(command, sizeof(command), memstream));
+	// debug("command: %s", command);
+	//dynamically allocates memory for reading command lines
+	while(getline(&msg, &msg_size, memstream) != -1) {
+		// debug("hi");
+		//set newline to null pointer
+		// debug("msg arg: %d", msg[strlen(msg) - 1]);
+		// debug("msg: %s", msg);
+		msg[strlen(msg) - 1] = '\0';
+
+
+		int recv = sender->wType->recv(sender, msg);
+		if( recv == 1) {
+			quit = 1;
+		} else if(recv == -1) {
+			err = 1;
+		}
+
+
+		// if(CLI->wType->send(CLI, "ticker> ") < 0) {
+		// 	perror("send failed");
+		// }
+
+		//free array after use
+		free(msg);
+		msg = NULL;
+		msg_size = 0;
+
+		//if command is quit, break
+		if(quit || err) {
+			break;
+		}
+	}
+	//free array after use
+	free(msg);
+		msg = NULL;
+		msg_size = 0;
+
 
 	return 0;
 }
@@ -408,17 +509,22 @@ int ticker(void) {
 
 	while(!quit && !err) {
 		// debug("hi");
-		if(!sigIO) {
+		if(!userInput && !processInput) {
 			sigsuspend(&mask);
 		}
 		// debug("userInput: %d", userInput);
-		if(sigIO) {
-			sigIO = 0;
+		if(userInput) {
+			// sigIO = 0;
 			if(readFromInput() == -1) {
 				quit = 1;
 				err = 1;
 			}
-
+		}
+		if(processInput) {
+			if(readFromProcess(processInput) == -1) {
+				quit = 1;
+				err = 1;
+			}
 		}
 		// if(watcher_table[1]) {
 		// 	debug("args: %s", watcher_table[1]->args[0]);
