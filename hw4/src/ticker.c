@@ -8,6 +8,7 @@
 #include "debug.h"
 #include "watchers.h"
 #include <sys/wait.h>
+#include <time.h>
 // #include "flags.h"
 
 #include "ticker.h"
@@ -28,12 +29,17 @@ int childrenAllocated = 0;
 //track of number of children freed
 int childrenFreed = 0;
 
+volatile sig_atomic_t userInput = 0;
+volatile sig_atomic_t processInput = 0;
+
 
 void sigIntHandler(int sig) {
 	debug("sigInt terminated\n");
 	//figure out what to close and shit
 	//don't exit
 	exit(0);
+	quit = 1;
+
 }
 
 void sigChildHandler(int sig) {
@@ -59,6 +65,8 @@ void sigChildHandler(int sig) {
 						free(CLI->watcher_table[terminated]->args[argsIndex]);
 						argsIndex++;
 					}
+					close(CLI->watcher_table[terminated]->fd1);
+					close(CLI->watcher_table[terminated]->fd2);
 					free(CLI->watcher_table[terminated]->args);
 					free(CLI->watcher_table[terminated]);
 					CLI->watcher_table[terminated] = NULL;
@@ -81,6 +89,7 @@ void sigChildHandler(int sig) {
 		err = 1;
 		// exit(1);
 	}
+	processInput = 0;
 	// debug("quit, %d", quit);
 	// if(quit) {
 	// 	childrenFreed += 1;
@@ -91,25 +100,51 @@ void sigChildHandler(int sig) {
 }
 
 //becomes 1 if userinput is avaliable
-volatile sig_atomic_t userInput = 0;
-volatile sig_atomic_t processInput = 0;
+// volatile sig_atomic_t userInput = 0;
+// volatile sig_atomic_t processInput = 0;
 
-void sigIOHandler(int sig, siginfo_t *siginfo, void *context) {
-	//execute first
-	//gets stdin file descriptor
-    int fd = siginfo->si_fd;
+// void sigIOHandler(int sig, siginfo_t *siginfo, void *context) {
+// 	//execute first
+// 	//gets stdin file descriptor
+//     int fd = siginfo->si_fd;
 
-	// if user input is avaliable on stdin
-	if(fd == STDIN_FILENO) {
-		// user input avaliable
-		debug("fd: %d", fd);
-		userInput = 1;
-	} else {
-		debug("fd: %d", fd);
-		processInput = fd;
-	}
-	// sigIO = 1;
-}
+// 	// if user input is avaliable on stdin
+// 	if(fd == STDIN_FILENO) {
+// 		// user input avaliable
+// 		debug("fd: %d", fd);
+// 		userInput = 1;
+// 	} else {
+// 		// debug("fd: %d", fd);
+// 		// processInput = fd;
+// 		if(readFromProcess(fd) == -1) {
+// 			quit = 1;
+// 			err = 1;
+// 		}
+// 	}
+// 	// sigIO = 1;
+// }
+
+// int outputTracing(WATCHER *wp, char *traceMsg) {
+// 	debug("traceMsg: %s", traceMsg);
+// 	debug("wp->tracing: %d", wp->tracing);
+// 	if(wp->tracing) {
+// 		// debug("traceMsg: %s", traceMsg);
+// 		// debug("wp->tracing: %d", wp->tracing);
+// 		debug("wp->fd2: %d", wp->fd2);
+// 		struct timespec ts;
+// 		if(clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+// 			perror("clock_gettime failed");
+// 			return -1;
+// 		}
+// 		// int microsecs = ts.tv_nsec / 1000;
+// 		if(fprintf(stderr, "[%ld.%06ld][%s][%d][%d]: [%s]", 
+// 		ts.tv_sec, ts.tv_nsec / 1000, wp->wType->name, wp->fd1, wp->fd2, traceMsg)) {
+// 			perror("fprintf failed");
+// 			return -1;
+// 		}
+// 	}
+// 	return 0;
+// }
 
 // void readFromInput(sigset_t *mask) {
 int readFromInput() {
@@ -271,12 +306,14 @@ int readFromProcess(int fd) {
 	static FILE *memstream = NULL;
 	WATCHER *sender = NULL;
 
-	for(int i = 0; i < CLI->watcher_table_size; i++) {
-		if(CLI->watcher_table[i]->fd1 == fd) {
-			sender = CLI->watcher_table[i];
-			debug("sender: %d", sender->fd1);
-			debug("fd: %d", fd);
-			break;
+	for(int i = 1; i < CLI->watcher_table_size; i++) {
+		if(CLI->watcher_table[i]) {
+			if(CLI->watcher_table[i]->fd1 == fd) {
+				sender = CLI->watcher_table[i];
+				// debug("sender: %d", sender->fd1);
+				// debug("fd: %d", fd);
+				break;
+			}
 		}
 	}
 
@@ -334,6 +371,7 @@ int readFromProcess(int fd) {
 
 
 		int recv = sender->wType->recv(sender, msg);
+		// debug("recv: %d", recv);
 		if( recv == 1) {
 			quit = 1;
 		} else if(recv == -1) {
@@ -357,11 +395,50 @@ int readFromProcess(int fd) {
 	}
 	//free array after use
 	free(msg);
-		msg = NULL;
-		msg_size = 0;
+	msg = NULL;
+	msg_size = 0;
 
+	// if((quit || err) && memstream) {
+		// debug("quit: %d", quit);
+		// debug("n: %d", n);
+		// debug("memstream: %p", memstream);
+	if(fclose(memstream) == EOF) {
+		perror("fclose memstream failed");
+		// exit(1);
+		// return -1;
+		err = 1;
+	}
+	free(buf);
+	buf = NULL;
+	memstream = NULL;
+	buf_size = 0;
+	// }
 
+	if(err) return -1;
+	
 	return 0;
+}
+
+void sigIOHandler(int sig, siginfo_t *siginfo, void *context) {
+	//execute first
+	//gets stdin file descriptor
+    int fd = siginfo->si_fd;
+
+	// if user input is avaliable on stdin
+	if(fd == STDIN_FILENO) {
+		// user input avaliable
+		// debug("fd: %d", fd);
+		userInput = 1;
+	} else {
+		// debug("fd: %d", fd);
+		// processInput = fd;
+		// if(readFromProcess(fd) == -1) {
+		// 	quit = 1;
+		// 	err = 1;
+		// }
+		processInput = fd;
+	}
+	// sigIO = 1;
 }
 
 int ticker(void) {
@@ -520,7 +597,31 @@ int ticker(void) {
 				err = 1;
 			}
 		}
+		// debug("userInput: %d", userInput);
+		// debug("processInput: %d", processInput);
+		// debug("err: %d", err);
+		// debug("quit: %d", quit);
+		if(quit || err) {
+			// debug("hi");
+			sigset_t sigset;
+			if (sigemptyset(&sigset)) {
+				perror("sigemptyset");
+				// return 1;
+				err = 1;
+			}
+			if (sigaddset(&sigset, SIGIO)) {
+				perror("sigaddset");
+				// return 1;
+				err = 1;
+			}
+			if (sigprocmask(SIG_BLOCK, &sigset, NULL)) {
+				perror("sigprocmask");
+				// return 1;
+				err = 1;
+			}
+		}
 		if(processInput) {
+			// debug("processInput");
 			if(readFromProcess(processInput) == -1) {
 				quit = 1;
 				err = 1;
@@ -553,6 +654,26 @@ int ticker(void) {
 		// 	}
 		// }
 	}
+
+
+	// if (quit) {
+    // sigset_t sigset;
+    // if (sigemptyset(&sigset)) {
+    //     perror("sigemptyset");
+    //     // return 1;
+	// 	err = 1;
+    // }
+    // if (sigaddset(&sigset, SIGIO)) {
+    //     perror("sigaddset");
+    //     // return 1;
+	// 	err = 1;
+    // }
+    // if (sigprocmask(SIG_BLOCK, &sigset, NULL)) {
+    //     perror("sigprocmask");
+    //     // return 1;
+	// 	err = 1;
+    // }
+
 
 	//quit happens
 	int closeIndex = 1;

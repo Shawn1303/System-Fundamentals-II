@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include "debug.h"
 #include <stdlib.h>
+#include <time.h>
+#include <store.h>
 
 //handles commands
 //0 if other command, 1 if quit
@@ -185,6 +187,88 @@ int handleCommand(char **command, WATCHER *CLI) {
 				// debug("pid: %d", CLI->watcher_table[2]->pid);
 			}
 		}
+	} else if(!(strcmp(firstArg, "trace"))) {
+		if(!secondArg) {
+			invalidCommand = 1;
+		} else {
+			//trace the watcher
+			int index = atoi(secondArg);
+			if(index < 0 || index >= CLI->watcher_table_size || !(CLI->watcher_table[index])) {
+				invalidCommand = 1;
+			} else {
+				if(CLI->watcher_table[index]->wType->trace(CLI->watcher_table[index], 1) < 0) {
+					perror("stop failed");
+					return -1;
+				}
+				// debug("tracing: %d", CLI->watcher_table[index]->tracing);
+				// debug("hi");
+				// debug("pid: %d", CLI->watcher_table[2]->pid);
+			}
+		}
+	} else if(!(strcmp(firstArg, "untrace"))) {
+		if(!secondArg) {
+			invalidCommand = 1;
+		} else {
+			//untrace the watcher
+			int index = atoi(secondArg);
+			if(index < 0 || index >= CLI->watcher_table_size || !(CLI->watcher_table[index])) {
+				invalidCommand = 1;
+			} else {
+				if(CLI->watcher_table[index]->wType->trace(CLI->watcher_table[index], 0) < 0) {
+					perror("stop failed");
+					return -1;
+				}
+				// debug("untracing: %d", CLI->watcher_table[index]->tracing);
+				// debug("hi");
+				// debug("pid: %d", CLI->watcher_table[2]->pid);
+			}
+		}
+	} else if(!(strcmp(firstArg, "show"))) {
+		if(!secondArg) {
+			invalidCommand = 1;
+		} else {
+			struct store_value *value;
+			if((value = store_get(secondArg))) {
+				//for price
+				// debug("value: %s", value->content);
+				if(value->type == STORE_LONG_TYPE) {
+					int showSize1;
+					if((showSize1 = snprintf(NULL, 0, "%s\t%ld\n", secondArg,value->content.long_value)) < 0) {
+						perror("snprintf failed");
+						return -1;
+					}
+					char showMSG1[showSize1 + 1];
+					if(snprintf(showMSG1, showSize1 + 1, "%s\t%ld\n", secondArg,value->content.long_value) < 0) {
+						perror("snprintf failed");
+						return -1;
+					}
+					showMSG1[showSize1] = '\0';
+					CLI->wType->send(CLI, showMSG1);
+				} else if(value->type == STORE_DOUBLE_TYPE) {
+					//for volume
+					int showSize2;
+					if((showSize2 = snprintf(NULL, 0, "%s\t%ld\n", secondArg,value->content.long_value)) < 0) {
+						perror("snprintf failed");
+						return -1;
+					}
+					char showMSG2[showSize2 + 1];
+					if(snprintf(showMSG2, showSize2 + 1, "%s\t%ld\n", secondArg,value->content.long_value) < 0) {
+						perror("snprintf failed");
+						return -1;
+					}
+					showMSG2[showSize2] = '\0';
+					CLI->wType->send(CLI, showMSG2);
+					
+				} else {
+					invalidCommand = 1;
+				}
+			} else {
+				invalidCommand = 1;
+			}
+		}
+		// } else {
+		// 	invalidCommand = 1;
+		// }
 	} else {
 		invalidCommand = 1;
 	}
@@ -194,6 +278,28 @@ int handleCommand(char **command, WATCHER *CLI) {
 		invalidCommand = 0;
 		if(CLI->wType->send(CLI, "???\n") < 0) {
 			perror("send failed");
+			return -1;
+		}
+	}
+	return 0;
+}
+
+int outputTracing(WATCHER *wp, char *traceMsg) {
+	// debug("traceMsg: %s", traceMsg);
+	// debug("wp->tracing: %d", wp->tracing);
+	if(wp->tracing) {
+		// debug("traceMsg: %s", traceMsg);
+		// debug("wp->tracing: %d", wp->tracing);
+		// debug("wp->fd2: %d", wp->fd2);
+		struct timespec ts;
+		if(clock_gettime(CLOCK_REALTIME, &ts) == -1) {
+			perror("clock_gettime failed");
+			return -1;
+		}
+		// int microsecs = ts.tv_nsec / 1000;
+		if(fprintf(stderr, "[%ld.%06ld][%s][ %d][\t%d]: %s\n", 
+		ts.tv_sec, ts.tv_nsec / 1000, wp->wType->name, wp->fd1, wp->serial, traceMsg) < 0) {
+			perror("fprintf failed");
 			return -1;
 		}
 	}

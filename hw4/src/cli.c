@@ -17,7 +17,7 @@ WATCHER *cli_watcher_start(WATCHER_TYPE *type, char *args[]) {
 		perror("malloc failed");
 		return NULL;
 	}
-	*wp = (WATCHER){.wType = type, .pid = -1, .fd1 = 0, .fd2 = 1, .args = args, .terminating = 0};
+	*wp = (WATCHER){.wType = type, .pid = -1, .fd1 = 0, .fd2 = 1, .args = args, .terminating = 0, .tracing = 0, .serial = 0};
 	return wp;
 }
 
@@ -39,14 +39,21 @@ int cli_watcher_send(WATCHER *wp, void *arg) {
     // if(!(strcmp(wp->wType->name, "CLI"))) {
 		// debug("size of arg: %zu", sizeof((char *)arg));
 		// debug("arg: %s", (char *)arg);
-	return write(STDOUT_FILENO, arg, strlen(arg));
-	// 	return 0;
+	if(arg) {
+		return write(STDOUT_FILENO, arg, strlen(arg));
+	}
+	return 0;
 	// }
     // return -1;
 }
 
 //handle user inputs
 int cli_watcher_recv(WATCHER *wp, char *txt) {
+	wp->serial++;
+	if(outputTracing(wp, txt) == -1) {
+		return -1;
+	}
+
     int spaceCount = 0;
 	for(int i = 0; i < strlen(txt); i++) {
 		if(txt[i] == ' ') {
@@ -73,6 +80,6 @@ int cli_watcher_recv(WATCHER *wp, char *txt) {
 }
 
 int cli_watcher_trace(WATCHER *wp, int enable) {
-    // TO BE IMPLEMENTED
-    abort();
+	wp->tracing = enable;
+	return 0;
 }

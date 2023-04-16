@@ -14,6 +14,8 @@ typedef struct watcher{
 	WATCHER **watcher_table;
 	int watcher_table_size;
 	int terminating;
+	int tracing;
+	int serial;
 } WATCHER;
 
 #endif /* WATCHER_H */
