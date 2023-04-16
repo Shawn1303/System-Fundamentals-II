@@ -583,6 +583,12 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 
 
 
+			//free last price
+			struct store_value *lastPriceValue;
+			if((lastPriceValue = store_get(priceKey))) {
+				store_free_value(lastPriceValue);
+				store_put(priceKey, NULL);
+			}
 			//store price
 			struct store_value *priceValue;
 			if((priceValue = malloc(sizeof(struct store_value))) == NULL) {
@@ -618,7 +624,8 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 			//store volume
 			struct store_value *oldVolume;
 			if((oldVolume = store_get(volumeKey))) {
-				long newVolume = amountDouble + oldVolume->content.double_value;
+				double newVolume = amountDouble + oldVolume->content.double_value;
+				// debug("newVolume: %f", newVolume);
 				// int newVolumeLen;
 				// if((newVolumeLen = snprintf(NULL, 0, "%ld", newVolume)) < 0) {
 				// 	perror("snprintf failed");
@@ -704,43 +711,12 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 			}
 			free(volumeKey);
 		} else if(!strcmp(eventName, "bts:subscription_succeeded")) {
-			struct store_value *initalStore;
-			if((initalStore = malloc(sizeof(struct store_value))) == NULL) {
-				perror("Undesired event");
-				free(eventName);
-				//argo_free_value(event);
-				if(fclose(fmemstream) == EOF) {
-					perror("fclose failed");
-					return -1;
-				}
-				argo_free_value(jsonValue);
-				free(wrapper - offset);
-				return -1;
-			}
-			initalStore->type = STORE_DOUBLE_TYPE;
-			initalStore->content.double_value = 0.0;
-
-
-			// char *cName;
-			// if(!(cName = argo_get_string_value(argo_get_object_value(jsonValue, "channel")))) {
-			// 	perror("Undesired event");
-			// 	free(eventName);
-			// 	//argo_free_value(event);
-			// 	free(initalStore);
-			// 	if(fclose(fmemstream) == EOF) {
-			// 		perror("fclose failed");
-			// 		return -1;
-			// 	}
-			// 	argo_free_value(jsonValue);
-			// 	free(wrapper - offset);
-			// 	return -1;
-			// }
 			int initalStoreKeyLen;
 			if((initalStoreKeyLen = snprintf(NULL, 0, "%s:%s:%s", wp->wType->name, wp->args[0], "volume")) < 0) {
 				perror("Undesired event");
 				free(eventName);
 				//argo_free_value(event);
-				free(initalStore);
+				// free(initalStore);
 				if(fclose(fmemstream) == EOF) {
 					perror("fclose failed");
 					return -1;
@@ -754,7 +730,7 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 				perror("Undesired event");
 				free(eventName);
 				//argo_free_value(event);
-				free(initalStore);
+				// free(initalStore);
 				if(fclose(fmemstream) == EOF) {
 					perror("fclose failed");
 					return -1;
@@ -767,7 +743,7 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 				perror("Undesired event");
 				free(eventName);
 				//argo_free_value(event);
-				free(initalStore);
+				// free(initalStore);
 				if(fclose(fmemstream) == EOF) {
 					perror("fclose failed");
 					return -1;
@@ -777,19 +753,41 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 				return -1;
 			}
 
-
-			if(store_put(initalStoreKey, initalStore)) {
-				perror("Undesired event");
-				free(eventName);
-				//argo_free_value(event);
-				free(initalStore);
-				if(fclose(fmemstream) == EOF) {
-					perror("fclose failed");
+			// debug("hi");
+			if(!(store_get(initalStoreKey))) {
+				// debug("yay");
+				struct store_value *initalStore;
+				if((initalStore = malloc(sizeof(struct store_value))) == NULL) {
+					perror("Undesired event");
+					free(eventName);
+					free(initalStoreKey);
+					//argo_free_value(event);
+					if(fclose(fmemstream) == EOF) {
+						perror("fclose failed");
+						return -1;
+					}
+					argo_free_value(jsonValue);
+					free(wrapper - offset);
 					return -1;
 				}
-				argo_free_value(jsonValue);
-				free(wrapper - offset);
-				return -1;
+				initalStore->type = STORE_DOUBLE_TYPE;
+				initalStore->content.double_value = 0.0;
+
+
+				if(store_put(initalStoreKey, initalStore)) {
+					perror("Undesired event");
+					free(eventName);
+					//argo_free_value(event);
+					free(initalStore);
+					free(initalStoreKey);
+					if(fclose(fmemstream) == EOF) {
+						perror("fclose failed");
+						return -1;
+					}
+					argo_free_value(jsonValue);
+					free(wrapper - offset);
+					return -1;
+				}
 			}
 			free(initalStoreKey);
 		} else {

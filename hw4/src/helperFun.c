@@ -247,12 +247,12 @@ int handleCommand(char **command, WATCHER *CLI) {
 				} else if(value->type == STORE_DOUBLE_TYPE) {
 					//for volume
 					int showSize2;
-					if((showSize2 = snprintf(NULL, 0, "%s\t%ld\n", secondArg,value->content.long_value)) < 0) {
+					if((showSize2 = snprintf(NULL, 0, "%s\t%f\n", secondArg,value->content.double_value)) < 0) {
 						perror("snprintf failed");
 						return -1;
 					}
 					char showMSG2[showSize2 + 1];
-					if(snprintf(showMSG2, showSize2 + 1, "%s\t%ld\n", secondArg,value->content.long_value) < 0) {
+					if(snprintf(showMSG2, showSize2 + 1, "%s\t%f\n", secondArg,value->content.double_value) < 0) {
 						perror("snprintf failed");
 						return -1;
 					}
