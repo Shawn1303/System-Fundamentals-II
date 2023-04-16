@@ -9,6 +9,7 @@
 #include "watchers.h"
 #include <sys/wait.h>
 #include <time.h>
+#include <store.h>
 // #include "flags.h"
 
 #include "ticker.h"
@@ -34,10 +35,10 @@ volatile sig_atomic_t processInput = 0;
 
 
 void sigIntHandler(int sig) {
-	debug("sigInt terminated\n");
+	// debug("sigInt terminated\n");
 	//figure out what to close and shit
 	//don't exit
-	exit(0);
+	// exit(0);
 	quit = 1;
 
 }
@@ -58,6 +59,57 @@ void sigChildHandler(int sig) {
 			// debug("pid: %d", pid);
 			if(CLI->watcher_table[terminated]) {
 				if(CLI->watcher_table[terminated]->pid == pid) {
+					//free store_get
+					int sameChannel = 0;
+					for(int i = 0; i < CLI->watcher_table_size; i++) {
+						if(CLI->watcher_table[i]) {
+							if(!(strcmp(CLI->watcher_table[terminated]->wType->name, CLI->watcher_table[i]->wType->name))) {
+								if(!(strcmp(CLI->watcher_table[terminated]->args[0], CLI->watcher_table[i]->args[0]))) {
+									sameChannel += 1;
+								}
+							}
+						}
+					}
+					//if it is only channel
+					if(sameChannel == 1) {
+						//free price
+						int key1Len;
+						if((key1Len = snprintf(NULL, 0, "%s:%s:%s", CLI->watcher_table[terminated]->wType->name, CLI->watcher_table[terminated]->args[0], "price")) < 0) {
+							perror("snprintf failed");
+							err = 1;
+						}
+						char key1[key1Len + 1];
+						if((sprintf(key1, "%s:%s:%s", CLI->watcher_table[terminated]->wType->name, CLI->watcher_table[terminated]->args[0], "price")) < 0) {
+							perror("sprintf failed");
+							err = 1;
+						}
+						struct store_value *value1;
+						if((value1 = store_get(key1))) {
+							store_free_value(value1);
+							store_put(key1, NULL);
+						}
+						//free volume
+						int key2Len;
+						if((key2Len = snprintf(NULL, 0, "%s:%s:%s", CLI->watcher_table[terminated]->wType->name, CLI->watcher_table[terminated]->args[0], "volume")) < 0) {
+							perror("snprintf failed");
+							err = 1;
+						}
+						char key2[key2Len + 1];
+						if((sprintf(key2, "%s:%s:%s", CLI->watcher_table[terminated]->wType->name, CLI->watcher_table[terminated]->args[0], "volume")) < 0) {
+							perror("sprintf failed");
+							err = 1;
+						}
+						struct store_value *value2;
+						if((value2 = store_get(key2))) {
+							store_free_value(value2);
+							store_put(key2, NULL);
+						}
+					}
+
+
+
+
+					//free watcher
 					// debug("freeing");
 					int argsIndex = 0;
 					while(CLI->watcher_table[terminated]->args[argsIndex]) {
@@ -279,7 +331,7 @@ int readFromInput() {
 	}
 
 	//close memstream and free memory
-	if((quit || err) && memstream) {
+	if(memstream) {
 		// debug("quit: %d", quit);
 		// debug("n: %d", n);
 		// debug("memstream: %p", memstream);

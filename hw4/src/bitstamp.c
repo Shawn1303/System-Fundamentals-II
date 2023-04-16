@@ -618,6 +618,7 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 				return -1;
 			}
 			free(priceKey);
+			free(priceValue);
 
 
 
@@ -680,6 +681,7 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 					return -1;
 				}
 				store_free_value(oldVolume);
+				free(newVolumeValue);
 			} else {
 				struct store_value *volumeValue;
 				if((volumeValue = malloc(sizeof(struct store_value))) == NULL) {
@@ -708,6 +710,7 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 					free(wrapper - offset);
 					return -1;
 				}
+				free(volumeValue);
 			}
 			free(volumeKey);
 		} else if(!strcmp(eventName, "bts:subscription_succeeded")) {
@@ -725,20 +728,20 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 				free(wrapper - offset);
 				return -1;
 			}
-			char *initalStoreKey;
-			if((initalStoreKey = malloc(initalStoreKeyLen + 1)) == NULL) {
-				perror("Undesired event");
-				free(eventName);
-				//argo_free_value(event);
-				// free(initalStore);
-				if(fclose(fmemstream) == EOF) {
-					perror("fclose failed");
-					return -1;
-				}
-				argo_free_value(jsonValue);
-				free(wrapper - offset);
-				return -1;
-			}
+			char initalStoreKey[initalStoreKeyLen + 1];
+			// if((initalStoreKey = malloc(initalStoreKeyLen + 1)) == NULL) {
+			// 	perror("Undesired event");
+			// 	free(eventName);
+			// 	//argo_free_value(event);
+			// 	// free(initalStore);
+			// 	if(fclose(fmemstream) == EOF) {
+			// 		perror("fclose failed");
+			// 		return -1;
+			// 	}
+			// 	argo_free_value(jsonValue);
+			// 	free(wrapper - offset);
+			// 	return -1;
+			// }
 			if(sprintf(initalStoreKey, "%s:%s:%s", wp->wType->name, wp->args[0], "volume") < 0) {
 				perror("Undesired event");
 				free(eventName);
@@ -754,13 +757,13 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 			}
 
 			// debug("hi");
-			if(!(store_get(initalStoreKey))) {
+			struct store_value *initalStore;
+			if(!(initalStore = store_get(initalStoreKey))) {
 				// debug("yay");
-				struct store_value *initalStore;
 				if((initalStore = malloc(sizeof(struct store_value))) == NULL) {
 					perror("Undesired event");
 					free(eventName);
-					free(initalStoreKey);
+					// free(initalStoreKey);
 					//argo_free_value(event);
 					if(fclose(fmemstream) == EOF) {
 						perror("fclose failed");
@@ -779,7 +782,7 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 					free(eventName);
 					//argo_free_value(event);
 					free(initalStore);
-					free(initalStoreKey);
+					// free(initalStoreKey);
 					if(fclose(fmemstream) == EOF) {
 						perror("fclose failed");
 						return -1;
@@ -788,8 +791,11 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 					free(wrapper - offset);
 					return -1;
 				}
+				free(initalStore);
+			} else {
+				store_free_value(initalStore);
 			}
-			free(initalStoreKey);
+			// free(initalStoreKey);
 		} else {
 			perror("Undesired event");
 			free(eventName);
