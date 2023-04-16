@@ -626,6 +626,7 @@ int bitstamp_watcher_recv(WATCHER *wp, char *txt) {
 			struct store_value *oldVolume;
 			if((oldVolume = store_get(volumeKey))) {
 				double newVolume = amountDouble + oldVolume->content.double_value;
+				// debug("newVolume for %s: %f", wp->args[0], newVolume);
 				// debug("newVolume: %f", newVolume);
 				// int newVolumeLen;
 				// if((newVolumeLen = snprintf(NULL, 0, "%ld", newVolume)) < 0) {

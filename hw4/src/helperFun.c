@@ -262,6 +262,7 @@ int handleCommand(char **command, WATCHER *CLI) {
 				} else {
 					invalidCommand = 1;
 				}
+				free(value);
 			} else {
 				invalidCommand = 1;
 			}
