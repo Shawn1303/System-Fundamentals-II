@@ -21,7 +21,9 @@
 int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 	// debug("hi");
 	//convert to network byte order
+	// debug("hdr->size: %d", hdr->size);
 	hdr->size = htons(hdr->size);
+	// debug("hdr->size: %d", hdr->size);
 	hdr->timestamp_sec = htonl(hdr->timestamp_sec);
 	hdr->timestamp_nsec = htonl(hdr->timestamp_nsec);
 
@@ -41,6 +43,13 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 		}
 	}
 
+	//reset them
+	hdr->size = ntohs(hdr->size);
+	hdr->timestamp_sec = ntohl(hdr->timestamp_sec);
+	hdr->timestamp_nsec = ntohl(hdr->timestamp_nsec);
+
+	// debug("hdr->size: %d", hdr->size);
+
 	//write payload
 	if(data && hdr->size > 0) {
 		bytes_written = 0;
@@ -49,6 +58,8 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 
 		while(bytes_written < bytes_to_write) {
 			int results = write(fd, buffer + bytes_written, bytes_to_write - bytes_written);
+			// debug("results: %d", results);
+			// debug("bytes_to_write: %d", bytes_to_write);
 			if(results < 0) {
 				fprintf(stderr, "Error writing data to socket: %s\n", strerror(errno));
 				return -1;
