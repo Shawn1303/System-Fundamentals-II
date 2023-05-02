@@ -19,23 +19,33 @@
  * All multi-byte fields in the packet are assumed to be in network byte order.
  */
 int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
+	// debug("fd: %d", fd);
+	// debug("sending");
+	// debug("hdr->type: %u", hdr->type);
+	// debug("hdr->id: %u", hdr->id);
+	// debug("hdr->role: %u", hdr->role);
+	// debug("hdr->size: %u", hdr->size);
+	// debug("hdr->timestamp_sec: %u", hdr->timestamp_sec);
+	// debug("hdr->timestamp_nsec: %u", hdr->timestamp_nsec);
 	// debug("hi");
 	//convert to network byte order
 	// debug("hdr->size: %d", hdr->size);
-	hdr->size = htons(hdr->size);
 	// debug("hdr->size: %d", hdr->size);
-	hdr->timestamp_sec = htonl(hdr->timestamp_sec);
-	hdr->timestamp_nsec = htonl(hdr->timestamp_nsec);
+	// hdr->size = htons(hdr->size);
+	// hdr->timestamp_sec = htonl(hdr->timestamp_sec);
+	// hdr->timestamp_nsec = htonl(hdr->timestamp_nsec);
 
 	//write header
-	int bytes_written = 0;
-	int bytes_to_write = sizeof(JEUX_PACKET_HEADER);
+	ssize_t bytes_written = 0;
+	size_t bytes_to_write = sizeof(JEUX_PACKET_HEADER);
 	char *buffer = (char *)hdr;
 
+
 	while(bytes_written < bytes_to_write) {
-		int results = write(fd, buffer + bytes_written, bytes_to_write - bytes_written);
+		ssize_t results = write(fd, buffer + bytes_written, bytes_to_write - bytes_written);
 		if(results < 0) {
-			fprintf(stderr, "Error writing header to socket: %s\n", strerror(errno));
+			// fprintf(stderr, "Error writing header to socket: %s\n", strerror(errno));
+			error("Error writing header to socket: %s", strerror(errno));
 			return -1;
 			// break;
 		} else {
@@ -44,30 +54,45 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 	}
 
 	//reset them
-	hdr->size = ntohs(hdr->size);
-	hdr->timestamp_sec = ntohl(hdr->timestamp_sec);
-	hdr->timestamp_nsec = ntohl(hdr->timestamp_nsec);
+	// debug("hdr->size: %d", hdr->size);
+	// hdr->size = ntohs(hdr->size);
+	// hdr->timestamp_sec = ntohl(hdr->timestamp_sec);
+	// hdr->timestamp_nsec = ntohl(hdr->timestamp_nsec);
+	// debug("hdr->size: %d", hdr->size);
+	// hdr->size = htons(hdr->size);
+	// hdr->size = ntohs(hdr->size);
+	// debug("hdr->size: %d", hdr->size);
+	// hdr->size = htons(hdr->size);
+	// debug("hdr->size: %d", hdr->size);
+	// hdr->timestamp_sec = htonl(hdr->timestamp_sec);
+	// hdr->timestamp_nsec = htonl(hdr->timestamp_nsec);
 
 	// debug("hdr->size: %d", hdr->size);
+	// debug("payload: %s", (char *)data);
 
 	//write payload
-	if(data && hdr->size > 0) {
+	if(data && htons(hdr->size) > 0) {
+		// debug("hi");
 		bytes_written = 0;
-		bytes_to_write = hdr->size;
+		// bytes_to_write = hdr->size;
+		bytes_to_write = htons(hdr->size);
 		buffer = (char *)data;
+		// debug("data: %s", buffer);
 
 		while(bytes_written < bytes_to_write) {
-			int results = write(fd, buffer + bytes_written, bytes_to_write - bytes_written);
+			ssize_t results = write(fd, buffer + bytes_written, bytes_to_write - bytes_written);
 			// debug("results: %d", results);
 			// debug("bytes_to_write: %d", bytes_to_write);
 			if(results < 0) {
-				fprintf(stderr, "Error writing data to socket: %s\n", strerror(errno));
+				// fprintf(stderr, "Error writing data to socket: %s\n", strerror(errno));
+				error("Error writing data to socket: %s\n", strerror(errno));
 				return -1;
 			} else {
 				bytes_written += results;
 			}
 		}
 	}
+	buffer = NULL;
 
 	return 0;
 }
@@ -89,18 +114,24 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
  */
 int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 	// debug("bye");
+	// debug("fd: %d", fd);
 	//read header
-	int bytes_read = 0;
-	int bytes_to_read = sizeof(JEUX_PACKET_HEADER);
+	ssize_t bytes_read = 0;
+	size_t bytes_to_read = sizeof(JEUX_PACKET_HEADER);
 	char *buffer = (char *)hdr;
 
 	while(bytes_read < bytes_to_read) {
-		int results = read(fd, buffer + bytes_read, bytes_to_read - bytes_read);
+		// debug("byeeeeeeeee");
+		size_t results = read(fd, buffer + bytes_read, bytes_to_read - bytes_read);
+		// debug("results from header: %d", results);
+		// debug("buffer: %s", buffer);
 		if(results < 0) {
-			fprintf(stderr, "Error reading header from socket: %s\n", strerror(errno));
+			// fprintf(stderr, "Error reading header from socket: %s\n", strerror(errno));
+			error("Error reading header from socket: %s\n", strerror(errno));
 			return -1;
 		} else if(results == 0) {
-			fprintf(stderr, "Socket closed, read EOF in header\n");
+			// fprintf(stderr, "Socket closed, read EOF in header\n");
+			error("Socket closed, read EOF in header\n");
 			return -1;
 		} else {
 			bytes_read += results;
@@ -108,34 +139,55 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 	}
 
 	//convert to host byte order
-	hdr->size = ntohs(hdr->size);
-	hdr->timestamp_sec = ntohl(hdr->timestamp_sec);
-	hdr->timestamp_nsec = ntohl(hdr->timestamp_nsec);
+	// hdr->size = ntohs(hdr->size);
+	// hdr->timestamp_sec = ntohl(hdr->timestamp_sec);
+	// hdr->timestamp_nsec = ntohl(hdr->timestamp_nsec);
+
+	// debug("receiving");
+	// debug("hdr->type: %u", hdr->type);
+	// debug("hdr->id: %u", hdr->id);
+	// debug("hdr->role: %u", hdr->role);
+	// debug("hdr->size: %u", hdr->size);
+	// debug("hdr->timestamp_sec: %u", hdr->timestamp_sec);
+	// debug("hdr->timestamp_nsec: %u", hdr->timestamp_nsec);
 
 	//read payload
-	if(hdr->size > 0) {
-		if(!(*payloadp = malloc(hdr->size + 1))) {
-			fprintf(stderr, "Error allocating memory for payload: %s\n", strerror(errno));
+	// if(hdr->size > 0) {
+	if(ntohs(hdr->size) > 0) {
+		// debug("hi");
+		// if(!(*payloadp = malloc(hdr->size + 1))) {
+		if(!(*payloadp = malloc(ntohs(hdr->size) + 1))) {
+			// fprintf(stderr, "Error allocating memory for payload: %s\n", strerror(errno));
+			error("Error allocating memory for payload: %s\n", strerror(errno));
 			return -1;
 		}
+		// debug("hi");
 		((char *)(*payloadp))[hdr->size] = '\0'; //null terminate the array
 
 		bytes_read = 0;
-		bytes_to_read = hdr->size;
+		// bytes_to_read = hdr->size;
+		bytes_to_read = ntohs(hdr->size);
 		buffer = (char *)*payloadp;
 
 		while(bytes_read < bytes_to_read) {
-			int results = read(fd, buffer + bytes_read, bytes_to_read - bytes_read);
+			ssize_t results = read(fd, buffer + bytes_read, bytes_to_read - bytes_read);
+			// debug("results from payload: %d", results);
+			// debug("bytes_to_read: %d", bytes_to_read);
+			// debug("buffer: %s", buffer);
 			if(results < 0) {
-				fprintf(stderr, "Error reading data: %s\n", strerror(errno));
+				// fprintf(stderr, "Error reading data: %s\n", strerror(errno));
+				error("Error reading data: %s\n", strerror(errno));
 				return -1;
 			} else if(results == 0) {
-				fprintf(stderr, "Socket closed, read EOF in payload\n");
+				// fprintf(stderr, "Socket closed, read EOF in payload\n");
+				error("Socket closed, read EOF in payload\n");
 				return -1;
 			} else {
 				bytes_read += results;
 			}
 		}
+		buffer = NULL;
+		// debug("payload: %s", (char *)(*payloadp));
 	}
 
 	return 0;

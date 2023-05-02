@@ -23,7 +23,7 @@ int _debug_packets_ = 1;
 
 static void terminate(int status);
 static void sigHandler(int sig);
-static void echo(int connfd);
+// static void echo(int connfd);
 static void *thread(void *vargp);
 
 /*
@@ -41,6 +41,7 @@ int main(int argc, char *argv[])
 	// Option processing should be performed here.
 	for(int i = 1; i < argc; i++) {
 		if(!strcmp(argv[i], "-p")) {
+			pOption = 1;
 			if(i + 1 < argc) {
 				// const char *str = argv[i + 1];
 				// char* endptr;
@@ -48,7 +49,6 @@ int main(int argc, char *argv[])
 				port = argv[i + 1];
 				// port = strtol(str, &endptr, 10);
 				i++;
-				pOption = 1;
 			}
 			// debug("hi");
 			//  else {
@@ -66,7 +66,8 @@ int main(int argc, char *argv[])
 	// debug("pOption: %d", pOption);
 	// debug("port: %s", port);
 	if(!pOption || !port) {
-		fprintf(stderr, "Usage: bin/jeux -p <port>\n");
+		// fprintf(stderr, "Usage: bin/jeux -p <port>\n");
+		error("Usage: bin/jeux -p <port>\n");
 		exit(EXIT_FAILURE);
 	}
 	// debug("hi");
@@ -92,45 +93,64 @@ int main(int argc, char *argv[])
 	//setup SIGHUP
 	struct sigaction sa;
 	sa.sa_handler = sigHandler;
+	sa.sa_flags = 0;
 	if(sigemptyset(&sa.sa_mask)) {
-		fprintf(stderr, "sigemptyset: %s\n", strerror(errno));
+		// fprintf(stderr, "sigemptyset: %s\n", strerror(errno));
+		error("sigemptyset: %s\n", strerror(errno));
 		terminate(EXIT_FAILURE);
 	}
 	if(sigaction(SIGHUP, &sa, NULL)) {
-		fprintf(stderr, "sigaction: %s\n", strerror(errno));
+		// fprintf(stderr, "sigaction: %s\n", strerror(errno));
+		error("sigaction: %s\n", strerror(errno));
 		terminate(EXIT_FAILURE);
 	}
 
 	//setup server socket
-	int listenfd, *connfdp;
+	// int listenfd, *connfdp;
+	int listenfd, *connfdp, connfd;
 	socklen_t clientlen;
 	struct sockaddr_storage clientaddr; /* Enough space for any address */
 	// char client_hostname[MAXLINE], client_port[MAXLINE];
 	pthread_t tid;
 
 	if((listenfd = open_listenfd(port)) < 0) {
-		fprintf(stderr, "Open_listenfd: %s\n", strerror(errno));
+		// fprintf(stderr, "Open_listenfd: %s\n", strerror(errno));
+		error("Open_listenfd: %s\n", strerror(errno));
 		terminate(EXIT_FAILURE);
 	}
+
 	debug("Jeux server listening on port %s\n", port);
+
 	while(1) {
 		clientlen = sizeof(struct sockaddr_storage);
-		connfdp = Malloc(sizeof(int));
-		if((*connfdp = accept(listenfd, (SA *)&clientaddr, &clientlen)) < 0) {
+		// connfdp = malloc(sizeof(int));
+		// if((*connfdp = accept(listenfd, (SA *)&clientaddr, &clientlen)) < 0) {
+		if((connfd = accept(listenfd, (SA *)&clientaddr, &clientlen)) < 0) {
 			// fprintf(stderr, "Accept: %s\n", strerror(errno));
+			error("Accept: %s\n", strerror(errno));
 			// terminate(EXIT_FAILURE);
 			free(connfdp);
 			continue;
+		} 
+		else {
+			if(!(connfdp = malloc(sizeof(int)))) {
+				// fprintf(stderr, "malloc: %s\n", strerror(errno));
+				error("malloc: %s\n", strerror(errno));
+				terminate(EXIT_FAILURE);
+			}
+			*connfdp = connfd;
 		}
 		// getnameinfo((SA *) &clientaddr, clientlen, client_hostname, MAXLINE,
-		// client_port, MAXLINE, 0);
+		// client_port, MAXLINiE, 0);
 		// printf("Connected to (%s, %s)\n", client_hostname, client_port);
 		// echo(connfd);
 		// Close(connfd);
 		// debug("Connection accepted");
+		// if(pthread_create(&tid, NULL, jeux_client_service, connfdp)) {
 		if(pthread_create(&tid, NULL, thread, connfdp)) {
 			// debug("errno: %d", errno);
-			fprintf(stderr, "pthread_create: %s\n", strerror(errno));
+			// fprintf(stderr, "pthread_create: %s\n", strerror(errno));
+			error("pthread_create: %s\n", strerror(errno));
 			terminate(EXIT_FAILURE);
 		}
 	}
@@ -166,7 +186,7 @@ void terminate(int status)
 
 void sigHandler(int sig) {
 	if(sig == SIGHUP) {
-		// debug("hi");
+		debug("terminating server...");
 		terminate(EXIT_SUCCESS);
 	}
 }
@@ -184,14 +204,26 @@ void sigHandler(int sig) {
 // 	}
 // }
 
+// void *jeux_client_service(void *vargp)
+// {
+// 	// int connfd = *((int *)vargp);
+// 	pthread_detach(pthread_self());
+// 	// debug("hi");
+// 	// echo(connfd);
+// 	jeux_client_service(vargp);
+// 	// close(*((int *)vargp));
+// 	free(vargp);
+// 	return NULL;
+// } 
 void *thread(void *vargp)
 {
 	// int connfd = *((int *)vargp);
-	Pthread_detach(pthread_self());
+	pthread_detach(pthread_self());
 	// debug("hi");
 	// echo(connfd);
 	jeux_client_service(vargp);
-	// Free(vargp);
-	// Close(connfd);
+	// debug("closing connection...");
+	// close(*((int *)vargp));
+	// free(vargp);
 	return NULL;
 } 
