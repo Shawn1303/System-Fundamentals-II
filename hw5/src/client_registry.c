@@ -3,6 +3,9 @@
 #include <semaphore.h>
 #include "debug.h"
 #include <stdlib.h>
+#include <pthread.h>
+#include <string.h>
+#include <unistd.h>
 
 /*
  * The CLIENT_REGISTRY type is a structure that defines the state of a
@@ -12,10 +15,13 @@
  * concurrently are thread-safe.
  */
 typedef struct client_registry {
-	int clients_count;
+	int client_thread_counts;
+	// CLIENT *firstClient;
 	CLIENT **clients;
-	sem_t mutex;
+	int fd[1024];
+	pthread_mutex_t mutex;
 	sem_t semaphore;
+	int waiting_shutdown;
 } CLIENT_REGISTRY;
 
 /*
@@ -25,6 +31,7 @@ typedef struct client_registry {
  * fails.
  */
 CLIENT_REGISTRY *creg_init() {
+	// debug("%ld: Initialize client registry", pthread_self());
 	CLIENT_REGISTRY *cr;
 	if(!(cr = malloc(sizeof(CLIENT_REGISTRY)))) {
 		error("malloc failed");
@@ -32,12 +39,38 @@ CLIENT_REGISTRY *creg_init() {
 	}
 
 	*cr = (CLIENT_REGISTRY) {
-		.clients_count = 0,
-		.clients = (CLIENT **) calloc(MAX_CLIENTS, sizeof(CLIENT *)),
-		.mutex = {{ sem_init(&cr->mutex, 0, 1) }},
-		.semaphore = {{ sem_init(&cr->semaphore, 0, 0) }}
+		.client_thread_counts = 0,
+		// .firstClient = NULL,
+		.clients = calloc(MAX_CLIENTS, sizeof(CLIENT *)),
+		.waiting_shutdown = 0
 	};
+
+	if(!cr->clients) {
+		error("calloc failed");
+		free(cr);
+		return NULL;
+	}
+
+	if (pthread_mutex_init(&cr->mutex, NULL) < 0) {
+		error("Mutex initialization failed");
+		free(cr->clients);
+		free(cr);
+		return NULL;
+	}
+
+	if (sem_init(&cr->semaphore, 0, 0) < 0) {
+		error("Semaphore initialization failed");
+		pthread_mutex_destroy(&cr->mutex);
+		free(cr->clients);
+		free(cr);
+		return NULL;
+	}
+
+	for(int i = 0; i < 1024; i++) {
+		cr->fd[i] = -1;
+	}
 	
+	debug("%ld: Initialize client registry", pthread_self());
 	return cr;
 }
 
@@ -50,7 +83,16 @@ CLIENT_REGISTRY *creg_init() {
  * be referenced again.
  */
 void creg_fini(CLIENT_REGISTRY *cr) {
-	return;
+	// debug("%ld: Finalize client registry", pthread_self());
+	if(cr->client_thread_counts) {
+		return;
+	}
+
+	pthread_mutex_destroy(&cr->mutex);
+	sem_destroy(&cr->semaphore);
+	free(cr->clients);
+	free(cr);
+	debug("%ld: Finalize client registry", pthread_self());
 }
 
 /*
@@ -64,7 +106,44 @@ void creg_fini(CLIENT_REGISTRY *cr) {
  * is successful, otherwise NULL.
  */
 CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
-	return NULL;
+	// debug("%ld: Register client fd %d", pthread_self(), fd);
+	pthread_mutex_lock(&cr->mutex);
+	//check if full
+	if(cr->client_thread_counts == MAX_CLIENTS) {
+		error("max clients reached");
+		pthread_mutex_unlock(&cr->mutex);
+		return NULL;
+	}
+	//check if fd is not registered
+	if(cr->fd[fd] != -1) {
+		error("fd already registered");
+		pthread_mutex_unlock(&cr->mutex);
+		return NULL;
+	}
+	//create client
+	CLIENT *client;
+	if(!(client = client_create(cr, fd))) {
+		error("client_create failed");
+		pthread_mutex_unlock(&cr->mutex);
+		return NULL;
+	}
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		if(!(cr->clients[i])) {
+			cr->clients[i] = client;
+			break;
+		}
+	}
+	//increment client reference count
+	// client_ref(client, "for newly created client");
+	//increment client count
+	cr->client_thread_counts++;
+	//register fd
+	cr->fd[fd] = 1;
+	debug("%ld: Register client fd %d (total connected: %d)", pthread_self(), fd, cr->client_thread_counts);
+
+	pthread_mutex_unlock(&cr->mutex);
+
+	return client;
 }
 
 /*
@@ -81,6 +160,52 @@ CLIENT *creg_register(CLIENT_REGISTRY *cr, int fd) {
  * @return 0  if unregistration succeeds, otherwise -1.
  */
 int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
+	// debug("%ld: Unregister client fd %d", pthread_self(), client_get_fd(client));
+	pthread_mutex_lock(&cr->mutex);
+	//check if client is registered
+	int fd = client_get_fd(client);
+	if(cr->fd[fd] != 1) {
+		error("client not registered");
+		pthread_mutex_unlock(&cr->mutex);
+		return -1;
+	}
+
+	//remove client from array
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		if(cr->clients[i]) {
+			if(client_get_fd(cr->clients[i]) == client_get_fd(client)) {
+				cr->clients[i] = NULL;
+				//decrement client reference count
+				// client_unref(client, "client is being unregistered");
+				break;
+			}
+		}
+		if(i == MAX_CLIENTS - 1) {
+			error("client not found");
+			pthread_mutex_unlock(&cr->mutex);
+			return -1;
+		}
+	}
+
+	//decrement client count
+	cr->client_thread_counts--;
+	//unregister fd
+	cr->fd[fd] = -1;
+	debug("%ld: Unregister client fd %d (total connected: %d)", pthread_self(), fd, cr->client_thread_counts);
+	client_unref(client, "because client is being unregistered");
+
+	//if total connected is 0, allow threads to proceed
+	if(!(cr->client_thread_counts) && cr->waiting_shutdown) {
+		if(sem_post(&cr->semaphore) < 0) {
+			error("sem_post failed");
+			pthread_mutex_unlock(&cr->mutex);
+			return -1;
+			// terminate(EXIT_FAILURE);
+		}
+	}
+
+	pthread_mutex_unlock(&cr->mutex);
+
 	return 0;
 }
 
@@ -95,6 +220,28 @@ int creg_unregister(CLIENT_REGISTRY *cr, CLIENT *client) {
  * username, if there is one, otherwise NULL.
  */
 CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
+	pthread_mutex_lock(&cr->mutex);
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		if(cr->clients[i]) {
+			PLAYER *player;
+			//get player from client
+			if((player = client_get_player(cr->clients[i]))) {
+				//check if player name matches
+				if(!(strcmp(player_get_name(player), user))) {
+					//increment client reference count
+					client_ref(cr->clients[i], "for reference being returned by creg_lookup()");
+					pthread_mutex_unlock(&cr->mutex);
+					return cr->clients[i];
+				}
+			}
+		}
+		if(i == MAX_CLIENTS - 1) {
+			error("client not found");
+			pthread_mutex_unlock(&cr->mutex);
+			return NULL;
+		}
+	}
+	pthread_mutex_unlock(&cr->mutex);
 	return NULL;
 }
 
@@ -110,7 +257,44 @@ CLIENT *creg_lookup(CLIENT_REGISTRY *cr, char *user) {
  * @return the list of players as a NULL-terminated array of pointers.
  */
 PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
-	return NULL;
+	pthread_mutex_lock(&cr->mutex);
+	PLAYER **players;
+	if(!(players = malloc(sizeof(PLAYER *) * (cr->client_thread_counts + 1)))) {
+		error("malloc failed");
+		pthread_mutex_unlock(&cr->mutex);
+		return NULL;
+	}
+
+	int client_counted = 0;
+	int player_counted = 0;
+	for(int i = 0; i < MAX_CLIENTS; i++) {
+		if(cr->clients[i]) {
+			PLAYER *player;
+			//get player from client
+			if((player = client_get_player(cr->clients[i]))) {
+				//increment player reference count
+				player_ref(player, "for reference being added to players list");
+				players[player_counted] = player;
+				player_counted++;
+			}
+			client_counted++;
+			if(client_counted == cr->client_thread_counts) {
+				players[player_counted] = NULL;
+				break;
+			}
+		}
+	}
+
+	//realloc player array
+	// PLAYER **newPlayers;
+	// if(!(newPlayers = realloc(players, sizeof(PLAYER *) * (player_counted)))) {
+	// 	error("realloc failed");
+	pthread_mutex_unlock(&cr->mutex);
+	// 	return players;
+	// }
+
+	// return newPlayers;
+	return players;
 }
 
 /*
@@ -122,7 +306,18 @@ PLAYER **creg_all_players(CLIENT_REGISTRY *cr) {
  * @param cr  The client registry.
  */
 void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
-	return;
+	cr->waiting_shutdown = 1;
+	if(!(cr->client_thread_counts)) {
+		if(sem_post(&cr->semaphore) < 0) {
+			error("sem_post failed");
+			return;
+		}
+	}
+
+	if(sem_wait(&cr->semaphore) < 0) {
+		error("sem_wait failed");
+		return;
+	}
 }
 
 /*
@@ -136,5 +331,11 @@ void creg_wait_for_empty(CLIENT_REGISTRY *cr) {
  * @param cr  The client registry.
  */
 void creg_shutdown_all(CLIENT_REGISTRY *cr) {
-	return;
+	for(int i = 0; i < 1024; i++) {
+		if(cr->fd[i] == 1) {
+			shutdown(cr->fd[i], SHUT_RDWR);
+			creg_unregister(cr, cr->clients[i]);
+			close(cr->fd[i]);
+		}
+	}
 }

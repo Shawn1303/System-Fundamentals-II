@@ -1,9 +1,10 @@
 #include "protocol.h"
 #include "debug.h"
-#include "errno.h"
-#include "stdlib.h"
-#include "unistd.h"
-#include "string.h"
+#include <errno.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <string.h>
+#include <pthread.h>
 
 /*
  * Send a packet, which consists of a fixed-size header followed by an
@@ -20,7 +21,10 @@
  */
 int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 	// debug("fd: %d", fd);
-	// debug("sending");
+	// debug("proto_send_packet called");
+	debug("=> %u.%u: type=%u, size=%u, id=%u, role=%u,", 
+	ntohl(hdr->timestamp_sec), ntohl(hdr->timestamp_nsec), hdr->type, ntohs(hdr->size), hdr->id, hdr->role);
+	// hdr->timestamp_sec, hdr->timestamp_nsec, hdr->type, hdr->size, hdr->id, hdr->role);
 	// debug("hdr->type: %u", hdr->type);
 	// debug("hdr->id: %u", hdr->id);
 	// debug("hdr->role: %u", hdr->role);
@@ -91,6 +95,9 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 				bytes_written += results;
 			}
 		}
+		debug("payload=[%s]", (char *)data);
+	} else {
+		debug("(no payload)");
 	}
 	buffer = NULL;
 
@@ -113,6 +120,7 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
  * responsibility of freeing that storage.
  */
 int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
+	// debug("proto_recv_packet called");
 	// debug("bye");
 	// debug("fd: %d", fd);
 	//read header
@@ -131,12 +139,16 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 			return -1;
 		} else if(results == 0) {
 			// fprintf(stderr, "Socket closed, read EOF in header\n");
-			error("Socket closed, read EOF in header\n");
+			// debug("Socket closed, read EOF in header\n");
+			debug("%ld: EOF on fd: %d", pthread_self(), fd);
 			return -1;
 		} else {
 			bytes_read += results;
 		}
 	}
+
+	debug("<= %u.%u: type=%u, size=%u, id=%u, role=%u,",
+	ntohl(hdr->timestamp_sec), ntohl(hdr->timestamp_nsec), hdr->type, ntohs(hdr->size), hdr->id, hdr->role);
 
 	//convert to host byte order
 	// hdr->size = ntohs(hdr->size);
@@ -162,7 +174,7 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 			return -1;
 		}
 		// debug("hi");
-		((char *)(*payloadp))[hdr->size] = '\0'; //null terminate the array
+		((char *)(*payloadp))[ntohs(hdr->size)] = '\0'; //null terminate the array
 
 		bytes_read = 0;
 		// bytes_to_read = hdr->size;
@@ -180,7 +192,8 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 				return -1;
 			} else if(results == 0) {
 				// fprintf(stderr, "Socket closed, read EOF in payload\n");
-				error("Socket closed, read EOF in payload\n");
+				// debug("Socket closed, read EOF in payload\n");
+				debug("%ld: EOF on fd: %d", pthread_self(), fd);
 				return -1;
 			} else {
 				bytes_read += results;
@@ -188,7 +201,11 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 		}
 		buffer = NULL;
 		// debug("payload: %s", (char *)(*payloadp));
+		debug("payload=[%s]", (char *)(*payloadp));
+	} else {
+		debug("(no payload)");
 	}
+	// debug("received packet");
 
 	return 0;
 }

@@ -114,12 +114,12 @@ int main(int argc, char *argv[])
 	pthread_t tid;
 
 	if((listenfd = open_listenfd(port)) < 0) {
-		// fprintf(stderr, "Open_listenfd: %s\n", strerror(errno));
-		error("Open_listenfd: %s\n", strerror(errno));
+		fprintf(stderr, "bind: %s\n", strerror(errno));
+		// error("Open_listenfd: %s\n", strerror(errno));
 		terminate(EXIT_FAILURE);
 	}
 
-	debug("Jeux server listening on port %s\n", port);
+	debug("%ld: Jeux server listening on port %s\n", pthread_self(), port);
 
 	while(1) {
 		clientlen = sizeof(struct sockaddr_storage);
@@ -186,7 +186,7 @@ void terminate(int status)
 
 void sigHandler(int sig) {
 	if(sig == SIGHUP) {
-		debug("terminating server...");
+		// debug("terminating server...");
 		terminate(EXIT_SUCCESS);
 	}
 }
@@ -204,21 +204,10 @@ void sigHandler(int sig) {
 // 	}
 // }
 
-// void *jeux_client_service(void *vargp)
-// {
-// 	// int connfd = *((int *)vargp);
-// 	pthread_detach(pthread_self());
-// 	// debug("hi");
-// 	// echo(connfd);
-// 	jeux_client_service(vargp);
-// 	// close(*((int *)vargp));
-// 	free(vargp);
-// 	return NULL;
-// } 
 void *thread(void *vargp)
 {
 	// int connfd = *((int *)vargp);
-	pthread_detach(pthread_self());
+	// pthread_detach(pthread_self());
 	// debug("hi");
 	// echo(connfd);
 	jeux_client_service(vargp);
