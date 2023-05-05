@@ -101,7 +101,7 @@ void player_unref(PLAYER *player, char *why) {
 		free(player->username);
 		pthread_mutex_unlock(&player->mutex);
 		pthread_mutex_destroy(&player->mutex);
-		debug("Freeing player [%s]", player->username);
+		debug("Free player %p", player);
 		free(player);
 	}
 	pthread_mutex_unlock(&player->mutex);
