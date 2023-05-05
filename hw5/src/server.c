@@ -52,6 +52,7 @@ void *jeux_client_service(void *arg) {
 
 	JEUX_PACKET_HEADER *hdr;
 	if(!(hdr = calloc(1, sizeof(JEUX_PACKET_HEADER)))) {
+	// if(!(hdr = malloc(sizeof(JEUX_PACKET_HEADER)))) {
 		error("Failed to allocate memory for packet header");
 		creg_unregister(client_registry, client);
 		close(fd);
@@ -72,7 +73,18 @@ void *jeux_client_service(void *arg) {
 
 	int nack_flag = 0;
 	int EOF_flag = 0;
+	struct timespec ts;
 	while(!(proto_recv_packet(fd, hdr, &payload))) {
+		if(payload) {
+			payload = realloc(payload, ntohs(hdr->size) + 1);
+			char *payload_str = (char *)payload;
+			payload_str[ntohs(hdr->size)] = '\0';
+			// debug("payload[ntohs(hdr->size)] = %c", payload_str[ntohs(hdr->size)]);
+			// debug("payload[ntohs(hdr->size)] = %d", payload_str[ntohs(hdr->size)]);
+			// debug("payload[ntohs(hdr->size) - 1] = %c", payload_str[ntohs(hdr->size) - 1]);
+			// debug("payload[ntohs(hdr->size) - 1] = %d", payload_str[ntohs(hdr->size) - 1]);
+			// debug("ntohs(hdr->size) = %d", ntohs(hdr->size));
+		}
 		switch(hdr->type) {
 			case JEUX_LOGIN_PKT:
 				if(payload) {
@@ -84,22 +96,56 @@ void *jeux_client_service(void *arg) {
 				}
 				debug("%ld: [%d] LOGIN packet received", pthread_self(), fd);
 
+				// debug("hdr->timestamp_sec = %u", hdr->timestamp_sec);
+				// debug("hdr->timestamp_nsec = %u", hdr->timestamp_nsec);
+
+				// uint32_t timestamp_sec_prev = hdr->timestamp_sec;
+				// uint32_t timestamp_nsec_prev = hdr->timestamp_nsec; 
+
 
 				if(!client_get_player(client)) {
 					PLAYER *player;
+					// debug("hdr->timestamp_sec = %u", hdr->timestamp_sec);
+					// debug("hdr->timestamp_nsec = %u", hdr->timestamp_nsec);
+					// debug("timestamp_sec_prev = %u", timestamp_sec_prev);
+					// debug("timestamp_nsec_prev = %u", timestamp_nsec_prev);
 					// debug("hiiiiiiiiiiiiiiiii");
 					// if((player = player_create(payload))) {
 					if((player = preg_register(player_registry, (char *)payload))) {
 						// debug("hiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii");
+						// debug("hdr->timestamp_sec = %u", hdr->timestamp_sec);
+						// debug("hdr->timestamp_nsec = %u", hdr->timestamp_nsec);
+						// debug("timestamp_sec_prev = %u", timestamp_sec_prev);
+						// debug("timestamp_nsec_prev = %u", timestamp_nsec_prev);
+						// struct timespec ts;
+						// clock_gettime(CLOCK_MONOTONIC, &ts);
 						if(client_login(client, player) == 0) {
-							*hdr = (JEUX_PACKET_HEADER) {
-								.type = JEUX_ACK_PKT,
-								.id = 0,
-								.role = 0,
-								.size = 0,
-							};
-							if(client_send_ack(client, NULL, 0) < 0) {
+							// *hdr = (JEUX_PACKET_HEADER) {
+							// 	.type = JEUX_ACK_PKT,
+							// 	.id = 0,
+							// 	.role = 0,
+							// 	.size = 0,
+							// 	// .timestamp_sec = timestamp_sec_prev,
+							// 	// .timestamp_nsec = timestamp_nsec_prev
+							// 	.timestamp_sec = htonl((uint32_t)ts.tv_sec),
+							// 	.timestamp_nsec = htonl((uint32_t)ts.tv_nsec)
+							// };
+							// hdr->type = JEUX_ACK_PKT;
+							// hdr->id = 0;
+							// hdr->role = 0;
+							// hdr->size = 0;
+							// hdr->timestamp_sec = htonl((uint32_t)ts.tv_sec);
+							// hdr->timestamp_nsec = htonl((uint32_t)ts.tv_nsec);
+							// if(client_send_ack(client, NULL, 0) < 0) {
+							// debug("hdr->timestamp_sec = %u", hdr->timestamp_sec);
+							// debug("hdr->timestamp_nsec = %u", hdr->timestamp_nsec);
+							// debug("timestamp_sec_prev = %u", timestamp_sec_prev);
+							// debug("timestamp_nsec_prev = %u", timestamp_nsec_prev);
 							// if(client_send_packet(client, hdr, NULL) < 0) {
+							// 	error("Failed to send ACK packet");
+							// 	EOF_flag = 1;
+							// }
+							if(client_send_ack(client, NULL, 0) < 0) {
 								error("Failed to send ACK packet");
 								EOF_flag = 1;
 							}
@@ -221,22 +267,30 @@ void *jeux_client_service(void *arg) {
 					} 
 					if((inv_ID = client_make_invitation(client, target, source_role, target_role)) < 0) {
 						debug("%ld: [%d] Failed to create invitation", pthread_self(), fd);
-						client_unref(client, "after invitation attempt");
+						client_unref(target, "after invitation attempt");
 						// EOF_flag = 1;
 						nack_flag = 1;
 						break;
 					}
 
-					client_unref(client, "after invitation attempt");
+					client_unref(target, "after invitation attempt");
 					// debug("%ld: [%d] Add invitation as source", pthread_self(), fd);
-					*hdr = (JEUX_PACKET_HEADER) {
-						.type = JEUX_ACK_PKT,
-						.size = 0,
-						.id = inv_ID,
-						.role = 0
-						// .timestamp_sec = htonl(hdr->timestamp_sec),
-						// .timestamp_nsec = htonl(hdr->timestamp_nsec)
-					};
+					// struct timespec start_time;
+					// clock_gettime(CLOCK_REALTIME, &start_time);
+					// *hdr = (JEUX_PACKET_HEADER) {
+					// 	.type = JEUX_ACK_PKT,
+					// 	.size = 0,
+					// 	.id = inv_ID,
+					// 	.role = 0,
+					// 	// .timestamp_sec = htonl((uint32_t)start_time.tv_sec),
+					// 	// .timestamp_nsec = htonl(start_time.tv_nsec)
+					// 	// .timestamp_sec = ntohl((uint32_t)start_time.tv_sec),
+					// 	// .timestamp_nsec = ntohl((uint32_t)start_time.tv_nsec)
+					// };
+					// hdr->type = JEUX_ACK_PKT;
+					// hdr->id = inv_ID;
+					// hdr->role = 0;
+					// hdr->size = 0;
 					// JEUX_PACKET_HEADER *temphdr;
 					// if(!(temphdr = calloc(1, sizeof(JEUX_PACKET_HEADER)))) {
 					// 	error("Failed to allocate memory for ACK packet header");
@@ -250,6 +304,25 @@ void *jeux_client_service(void *arg) {
 					// 	.role = 0
 					// };
 					// if(client_send_packet(client, temphdr, NULL) < 0) {
+					clock_gettime(CLOCK_MONOTONIC, &ts);
+					// *hdr = (JEUX_PACKET_HEADER) {
+					// 	.type = JEUX_ACK_PKT,
+					// 	.id = inv_ID,
+					// 	.role = 0,
+					// 	.size = 0,
+					// 	.timestamp_sec = htonl((uint32_t)ts.tv_sec),
+					// 	.timestamp_nsec = htonl((uint32_t)ts.tv_nsec)
+					// };
+					// free(hdr);
+					// hdr = malloc(sizeof(JEUX_PACKET_HEADER));
+					*hdr = (JEUX_PACKET_HEADER) {
+						.type = JEUX_ACK_PKT,
+						.id = inv_ID,
+						.role = 0,
+						.size = 0,
+						.timestamp_sec = htonl((uint32_t)ts.tv_sec),
+						.timestamp_nsec = htonl((uint32_t)ts.tv_nsec)
+					};
 					if(client_send_packet(client, hdr, NULL) < 0) {
 						error("Failed to send ACK packet");
 						EOF_flag = 1;
@@ -323,17 +396,18 @@ void *jeux_client_service(void *arg) {
 				}
 
 				if(strp) {
-					*hdr = (JEUX_PACKET_HEADER) {
-						.type = JEUX_ACK_PKT,
-						.id = 0,
-						.role = 0,
-						.size = 0,
-					};
+					// *hdr = (JEUX_PACKET_HEADER) {
+					// 	.type = JEUX_ACK_PKT,
+					// 	.id = 0,
+					// 	.role = 0,
+					// 	.size = 0,
+					// };
 					if(client_send_ack(client, strp, strlen(strp) + 1) < 0) {
 						error("Failed to send ACCEPTED packet");
 						EOF_flag = 1;
 						break;
 					}
+					free(strp);
 					// if(client_send_packet(client, hdr, strp) < 0) {
 					// 	error("Failed to send ACCEPTED packet");
 					// 	EOF_flag = 1;
@@ -348,17 +422,17 @@ void *jeux_client_service(void *arg) {
 				}
 
 
-				*hdr = (JEUX_PACKET_HEADER) {
-					.type = JEUX_ACK_PKT,
-					.id = 0,
-					.role = 0,
-					.size = 0,
-				};
-				if(client_send_packet(client, hdr, strp) < 0) {
-					error("Failed to send ACCEPTED packet");
-					EOF_flag = 1;
-					break;
-				}
+				// *hdr = (JEUX_PACKET_HEADER) {
+				// 	.type = JEUX_ACK_PKT,
+				// 	.id = 0,
+				// 	.role = 0,
+				// 	.size = 0,
+				// };
+				// if(client_send_packet(client, hdr, strp) < 0) {
+				// 	error("Failed to send ACCEPTED packet");
+				// 	EOF_flag = 1;
+				// 	break;
+				// }
 
 				break;
 			case JEUX_DECLINE_PKT:
@@ -478,14 +552,18 @@ void *jeux_client_service(void *arg) {
 			break;
 		}
 	}
-	debug("%ld: [%d] Ending client service", pthread_self(), fd);
+	if(payload) {
+		free(payload);
+		payload = NULL;
+	}
+	free(hdr);
 	if(client_get_player(client)) {
 		player_unref(client_get_player(client), "because server thread is discarding reference to logged in player");
+		debug("%ld: [%d] Logging out client", pthread_self(), fd);
+		client_logout(client);
 	}
-	debug("%ld: [%d] Logging out client", pthread_self(), fd);
-	client_logout(client);
 	creg_unregister(client_registry, client);
-	free(hdr);
+	debug("%ld: [%d] Ending client service", pthread_self(), fd);
 	close(fd);
 	return NULL;
 }
