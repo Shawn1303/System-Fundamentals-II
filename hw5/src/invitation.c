@@ -114,7 +114,9 @@ void inv_unref(INVITATION *inv, char *why) {
 		debug("%ld: Free invitation %p", pthread_self(), inv);
 		client_unref(inv->source, "because invitation is being freed");
 		client_unref(inv->target, "because invitation is being freed");
-		game_unref(inv->game, "because invitation is being freed");
+		if(inv->game) {
+			game_unref(inv->game, "because invitation is being freed");
+		}
 		pthread_mutex_unlock(&inv->mutex);
 		// inv_close(inv, );
 		pthread_mutex_destroy(&inv->mutex);

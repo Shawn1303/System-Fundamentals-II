@@ -72,14 +72,16 @@ int proto_send_packet(int fd, JEUX_PACKET_HEADER *hdr, void *data) {
 	// hdr->timestamp_nsec = htonl(hdr->timestamp_nsec);
 
 	// debug("hdr->size: %d", hdr->size);
+	// debug("htons(hdr->size): %d", htons(hdr->size));
+	// debug("ntohs(hdr->size): %d", ntohs(hdr->size));
 	// debug("payload: %s", (char *)data);
 
 	//write payload
-	if(data && htons(hdr->size) > 0) {
+	if(data && ntohs(hdr->size) > 0) {
 		// debug("hi");
 		bytes_written = 0;
 		// bytes_to_write = hdr->size;
-		bytes_to_write = htons(hdr->size);
+		bytes_to_write = ntohs(hdr->size);
 		buffer = (char *)data;
 		// debug("data: %s", buffer);
 
@@ -147,8 +149,8 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 		}
 	}
 
-	debug("<= %u.%u: type=%u, size=%u, id=%u, role=%u,",
-	ntohl(hdr->timestamp_sec), ntohl(hdr->timestamp_nsec), hdr->type, ntohs(hdr->size), hdr->id, hdr->role);
+	// debug("<= %u.%u: type=%u, size=%u, id=%u, role=%u,",
+	// ntohl(hdr->timestamp_sec), ntohl(hdr->timestamp_nsec), hdr->type, ntohs(hdr->size), hdr->id, hdr->role);
 
 	//convert to host byte order
 	// hdr->size = ntohs(hdr->size);
@@ -201,10 +203,11 @@ int proto_recv_packet(int fd, JEUX_PACKET_HEADER *hdr, void **payloadp) {
 		}
 		buffer = NULL;
 		// debug("payload: %s", (char *)(*payloadp));
-		debug("payload=[%s]", (char *)(*payloadp));
-	} else {
-		debug("(no payload)");
-	}
+		// debug("payload=[%s]", (char *)(*payloadp));
+	} 
+	// else {
+	// 	debug("(no payload)");
+	// }
 	// debug("received packet");
 
 	return 0;

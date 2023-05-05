@@ -170,6 +170,8 @@ void player_post_result(PLAYER *player1, PLAYER *player2, int result){
     }
     // debug("S1 = %f, S2 = %f", S1, S2);
     //current ratings
+	pthread_mutex_lock(&player1->mutex);
+	pthread_mutex_lock(&player2->mutex);
     R1 = player_get_rating(player1);
     R2 = player_get_rating(player2);
     // debug("R1 = %f, R2 = %f", R1, R2);
@@ -180,6 +182,8 @@ void player_post_result(PLAYER *player1, PLAYER *player2, int result){
     //update ratings
     player1->rating += (int)(32*(S1-E1));
     player2->rating += (int)(32*(S2-E2));
+	pthread_mutex_unlock(&player1->mutex);
+	pthread_mutex_unlock(&player2->mutex);
     // debug("R1' = %d, R2' = %d", player1->rating, player2->rating);
 	// int S1, S2, E1, E2, R1, R2;
 	// //scores
