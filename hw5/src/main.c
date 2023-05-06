@@ -91,19 +91,31 @@ int main(int argc, char *argv[])
 	// shutdown of the server.
 
 	//setup SIGHUP
-	struct sigaction sa;
-	sa.sa_handler = sigHandler;
-	sa.sa_flags = 0;
-	if(sigemptyset(&sa.sa_mask)) {
+	struct sigaction sa1;
+	sa1.sa_handler = sigHandler;
+	sa1.sa_flags = 0;
+	if(sigemptyset(&sa1.sa_mask)) {
 		// fprintf(stderr, "sigemptyset: %s\n", strerror(errno));
 		error("sigemptyset: %s\n", strerror(errno));
 		terminate(EXIT_FAILURE);
 	}
-	if(sigaction(SIGHUP, &sa, NULL)) {
+	if(sigaction(SIGHUP, &sa1, NULL)) {
 		// fprintf(stderr, "sigaction: %s\n", strerror(errno));
 		error("sigaction: %s\n", strerror(errno));
 		terminate(EXIT_FAILURE);
 	}
+
+	//SIGPIPE
+	struct sigaction sa2;
+    sa2.sa_handler = sigHandler;
+    sigemptyset(&sa2.sa_mask);
+    sa2.sa_flags = 0;
+
+    // Set up the signal handler for SIGPIPE
+    if (sigaction(SIGPIPE, &sa2, NULL) == -1) {
+        perror("sigaction");
+        return -1;
+    }
 
 	//setup server socket
 	// int listenfd, *connfdp;
@@ -189,6 +201,11 @@ void sigHandler(int sig) {
 		// debug("terminating server...");
 		terminate(EXIT_SUCCESS);
 	}
+	if(sig == SIGPIPE) {
+		// debug("SIGPIPE");
+		debug("Failed to send end-of-game notification");
+	}
+	// debug("sigHandler: %d", sig);
 }
 
 // void echo(int connfd)
