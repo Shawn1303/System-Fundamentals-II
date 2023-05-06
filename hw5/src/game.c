@@ -157,6 +157,7 @@ void game_unref(GAME *game, char *why) {
 	debug("%ld: Decrease reference count on game %p (%d -> %d) %s",
 	pthread_self(), game, game->ref_count + 1, game->ref_count, why);
 	if (game->ref_count == 0) {
+		free(game->game_state);
 		pthread_mutex_unlock(&game->mutex);
 		pthread_mutex_destroy(&game->mutex);
 		debug("Freeing game %p", game);
@@ -206,6 +207,7 @@ int game_apply_move(GAME *game, GAME_MOVE *move) {
 			// debug("move->moveBox = %d", move->moveBox);
 			// debug("game->box_indexes[move->moveBox] = %d", game->box_indexes[move->moveBox - 1]);
 			// debug("game->game_state[game->box_indexes[move->moveBox]] = %c", game->game_state[game->box_indexes[move->moveBox]]);
+			debug("Apply move %d<-X to game %p", move->moveBox, game);
 			game->game_state[game->box_indexes[move->moveBox - 1]] = 'X';
 			// debug("game->game_state[game->box_indexes[move->moveBox]] = %c", game->game_state[game->box_indexes[move->moveBox]]);
 			// *(game->box_indexes[move->moveBox]) = 'X';
@@ -218,6 +220,7 @@ int game_apply_move(GAME *game, GAME_MOVE *move) {
 			// debug("move->moveBox = %d", move->moveBox);
 			// debug("game->box_indexes[move->moveBox] = %d", game->box_indexes[move->moveBox]);
 			// debug("game->game_state[game->box_indexes[move->moveBox]] = %c", game->game_state[game->box_indexes[move->moveBox]]);
+			debug("Apply move %d<-O to game %p", move->moveBox, game);
 			game->game_state[game->box_indexes[move->moveBox - 1]] = 'O';
 			// debug("game->game_state[game->box_indexes[move->moveBox]] = %c", game->game_state[game->box_indexes[move->moveBox]]);
 			// *(game->box_indexes[move->moveBox]) = 'O';
@@ -344,6 +347,24 @@ int game_resign(GAME *game, GAME_ROLE role) {
  * @return  A string that describes the current GAME state.
  */
 char *game_unparse_state(GAME *game) {
+	if(game->current_player == FIRST_PLAYER_ROLE) {
+		int len = snprintf(NULL, 0, "%sX to move", game->game_state);
+		char *str = malloc(len + 1);
+		// snprintf(str, len + 1, "%s X to move", game->game_state);
+		if(str != NULL) {
+			snprintf(str, len + 1, "%sX to move", game->game_state);
+			str[len] = '\0'; // Add null terminator
+		}
+		return str;
+	} else if(game->current_player == SECOND_PLAYER_ROLE) {
+		int len = snprintf(NULL, 0, "%sO to move", game->game_state);
+		char *str = malloc(len + 1);
+		if(str != NULL) {
+			snprintf(str, len + 1, "%sO to move", game->game_state);
+			str[len] = '\0'; // Add null terminator
+		}
+		return str;
+	}
 	return strdup(game->game_state);
 }
 
@@ -464,7 +485,7 @@ char *game_unparse_move(GAME_MOVE *move) {
 	str[0] = move->moveBox + '0';
 	str[1] = '\0';
 
-	debug("game_unparse_move: str = %s", str);
+	// debug("game_unparse_move: str = %s", str);
 
 	return str;
 }

@@ -76,7 +76,10 @@ void *jeux_client_service(void *arg) {
 	struct timespec ts;
 	while(!(proto_recv_packet(fd, hdr, &payload))) {
 		if(payload) {
-			payload = realloc(payload, ntohs(hdr->size) + 1);
+			void *payload_tmp;
+			if((payload_tmp = realloc(payload, ntohs(hdr->size) + 1))) {
+				payload = payload_tmp;
+			} 
 			char *payload_str = (char *)payload;
 			payload_str[ntohs(hdr->size)] = '\0';
 			// debug("payload[ntohs(hdr->size)] = %c", payload_str[ntohs(hdr->size)]);
@@ -485,7 +488,7 @@ void *jeux_client_service(void *arg) {
 					break;
 				}
 
-				debug("%ld: [%d] Move '%d'", pthread_self(), fd, hdr->id);
+				debug("%ld: [%d] Move '%d' (%s)", pthread_self(), fd, hdr->id, (char *)payload);
 
 				if(client_make_move(client, hdr->id, payload) < 0) {
 					// error("Failed to make move");
