@@ -395,6 +395,8 @@ void *jeux_client_service(void *arg) {
 					break;
 				}
 
+				// debug("strp = %s", strp ? strp : "(null)");
+
 				if(strp) {
 					// *hdr = (JEUX_PACKET_HEADER) {
 					// 	.type = JEUX_ACK_PKT,
