@@ -40,7 +40,7 @@ Test(student_suite, 00_start_server, .timeout = 30) {
     cr_assert_neq(WEXITSTATUS(ret), 0, "Server was already running");
     fprintf(stderr, "Starting server...");
     if((server_pid = fork()) == 0) {
-	execlp("valgrind", "jeux", "--leak-check=full", "--track-fds=yes",
+	execlp("valgrind", "jeux", "--leak-check=full", "--track-fds=yes", "--show-leak-kinds=all",
 	       "--error-exitcode=37", "--log-file="TEST_OUTPUT"valgrind.out", "bin/jeux", "-p", "9999", NULL);
 	fprintf(stderr, "Failed to exec server\n");
 	abort();
